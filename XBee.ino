@@ -21,11 +21,10 @@
 void readXBee() {
   static boolean escState = false;
 
-  if (!isXBee) return;
+//  if (isDebugSerial) return;
   
   while (Serial.available() > 0) {
     byte b = Serial.read();
-// Serial.print(b);
     if (b == 0x7e) {
       rcvPacketCount = 0;
       rcvDataFramePtr = 0;
@@ -92,10 +91,8 @@ void doRFData() {
   int rfPtr = 12;
   char msgVal[100];
   int msgValPtr = 0;
-  //Serial.print(rcvDataFrameLength); Serial.print("\t");
   while (rfPtr < rcvDataFrameLength) {
     byte b = rcvDataFrame[rfPtr];
-    //Serial.print(b, HEX); Serial.print(" ");
     if (b < 128) {
       msgVal[msgValPtr++] = b;
     }
@@ -121,21 +118,40 @@ void doMsg(int cmd, char msgStr[], int count, boolean isHc) {
   float floatVal;
   boolean booleanVal;
   String ss;
+//static int part = 0;
+//part = ++part % 4;
+//switch (part) {
+//  case 0:
+//    joyY = cmd;
+//    break;
+//  case 1:
+//    joyX = cmd;
+//    break;
+//  case 2:
+//    tickPositionRight = cmd;
+//    break;
+//  case 3:
+//    tickPositionLeft = cmd;
+//    break;
+//}
 
   msgStr[count] = 0; // Just to be sure.
-//  if ((cmd != RCV_JOYX) && (cmd != RCV_JOYY)) {
-    Serial.print(cmd); Serial.print("  "); Serial.println(msgStr);
-//  }
-
   switch (cmd) {
-    case RCV_JOYX:
-      if (sscanf(msgStr, "%f", &floatVal) >0) {
-        joyX = (short) (floatVal * 1000.0);
+    case RCV_JOYX_I:
+//joyX = msgStr[0];
+//joyY = msgStr[1];
+//tickPositionRight = msgStr[2];
+//tickPositionLeft = msgStr[3];
+//tickCountRight = msgStr[4];
+//tickCountLeft = msgStr[5];
+      if (sscanf(msgStr, "%d", &intVal) > 0) {
+        joyX = intVal;
       }
       break;
-    case RCV_JOYY:
-      if (sscanf(msgStr, "%f", &floatVal) >0) {
-        joyY = (short) (floatVal * 1000.0);}
+    case RCV_JOYY_I:
+      if (sscanf(msgStr, "%d", &intVal) > 0) {
+        joyY = intVal;
+      }
       break;
     case RCV_RUN:
       if (sscanf(msgStr, "%d", &intVal) > 0) {
@@ -143,7 +159,6 @@ void doMsg(int cmd, char msgStr[], int count, boolean isHc) {
       }
       break;
     default:
-      Serial.print("Illegal message received: "); Serial.println(cmd);
       break;
   }
 }

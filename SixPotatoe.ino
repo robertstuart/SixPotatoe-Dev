@@ -16,10 +16,10 @@
 const float ENC_FACTOR = 381.7f;  // Change pulse width to fps speed, 1/29 gear
 const long ENC_FACTOR_M = 3817000L;  // Change pulse width to milli-fps speed
 
-volatile char piReceivedMessage[READ_BUF_SIZE];
+volatile char piReceivedMessage[PA_BUF_SIZE];
 volatile bool isPiMessage = false;
 
-boolean isXBee = false;  // true if XBEE connect to serial rather than to computer via usb
+boolean isDebugSerial = false;  // true if XBEE connect to serial rather than to computer via usb
 
 int xBeeMsgType = 0;
 short joyX = 22;
@@ -30,7 +30,13 @@ float battVolt = 0.0;
 short battRaw = 0;
 unsigned long timeMilliseconds = 0UL;
 unsigned long timeMicroseconds = 0UL;
-boolean isRunning = false;
+boolean isRunning = true;
+
+unsigned long x = 0;
+
+float sendBatt = 0.0;
+float sendFps = 0.0;
+unsigned short sendStatus = 0;
 
 volatile long tickPositionRight = 0;
 volatile long tickPositionLeft = 0;
@@ -42,7 +48,7 @@ volatile long tickCountRight = 0;
 volatile long tickCountLeft = 0;
 
 volatile int writeCount = 0;
-char sendPacket[WRITE_BUF_SIZE] = {1,2,3,4,5,6,7,8,9,10,11};
+char sendPacket[AP_BUF_SIZE] = {1,2,3,4,5,6,7,8,9,10,11};
 
 float targetWhFpsRight = 0.0;
 float targetWhFpsLeft = 0.0;
@@ -69,7 +75,7 @@ void setup() {
 
   motorInit();
   Wire.begin(0X1c);
-//  Wire.setClock(400000);   // Needed?
+  Wire.setClock(400000);   // Any effect on slave?
   Wire.onReceive(receiveEvent);
   Wire.onRequest(requestEvent);
   Serial.begin(57600);  // For XBee
@@ -81,17 +87,18 @@ void setup() {
  * loop()
  ******************************************************************************/
 void loop() {
-  static unsigned long t = 0;
+  static unsigned long t1 = 0;
+  unsigned long t2 = 0;
   timeMicroseconds = micros();
   timeMilliseconds = millis();
-//  readXBee();
+  readXBee();
   if (isPiMessage) {
     isPiMessage = false;
     parsePiMessage();
-    checkMotors();
     prepareSendPacket();
     batt();
     blinkLed();
+//    debug();
   }
 }
 
@@ -101,27 +108,51 @@ void loop() {
  * parsePiMessage()           
  ******************************************************************************/
 void parsePiMessage() {
-  short r = (piReceivedMessage[0] & 0XFF) << 8;
-  r |= (piReceivedMessage[1] & 0XFF);
-  targetWhFpsRight = ((float) r) * 0.01;
   
-  short l = (piReceivedMessage[1] & 0XFF) << 8;
-  l |= (piReceivedMessage[1] && 0XFF);
-  targetWhFpsRight = ((float) l) * 0.01;
+  // Right motor direction and pw
+  boolean rDir = (piReceivedMessage[0] == 0) ? false : true;
+  byte rPw = piReceivedMessage[1];
+  setMotorRight(rPw, rDir);
 
-  xBeeMsgType = piReceivedMessage[4];
-  short v = (piReceivedMessage[5] & 0xFF) << 8;
-  v |= (piReceivedMessage[6] & 0xFF);
+  // Left motor direction and pw
+  boolean lDir = (piReceivedMessage[2] == 0) ? false : true;
+  byte lPw = piReceivedMessage[3];
+  setMotorLeft(lPw, lDir);
+
+  // Message to be sent to Xbee
+  byte xBeeCmd = piReceivedMessage[4];
+  short xBeeVal = (piReceivedMessage[5] & 0XFF) << 8;
+  xBeeVal |= (piReceivedMessage[6] & 0XFF);
+  switch(xBeeCmd) {  // Message to be sent to XBee
+    case SEND_FPS:
+      sendFps = ((float) xBeeVal) * 0.01;
+      break;
+    case SEND_BATT:
+      sendBatt = ((float) xBeeVal) * 0.01;
+      break;
+    case SEND_STATE:
+      sendStatus = xBeeVal;
+      break;
+  }
+//  debug2(rDir, rPw, lDir, lPw);
 }
 
+void debug2(boolean rDir, byte rPw, boolean lDir, byte lPw) {
+  static int count = 0;
+  if ((++count % 50) == 0) {
+    Serial.print(rDir); Serial.print(" "); Serial.print(rPw); Serial.print("\t");
+    Serial.print(lDir); Serial.print(" "); Serial.print(lPw); 
+    Serial.println();
+  }
+}
 
 /*******************************************************************************
  * blinkLed()  Blinking indicates packets being received.         
  ******************************************************************************/
 void blinkLed() {
-  static int count = 0;
+  static int bcount = 0;
   static int toggle = false;
-  if ((++count % 20) == 0) {
+  if ((++bcount % 20) == 0) {
     toggle = !toggle;
     digitalWrite(LED_PIN, (toggle) ? HIGH : LOW);
   }
@@ -138,6 +169,16 @@ void batt() {
     battTrigger = timeMilliseconds + 1000;
     battVolt = ((float) analogRead(BATT_PIN)) * .022;
     battRaw = (short) (battVolt * 100.0);
+  }
+}
+
+void debug() {
+  static int dcount = 0;
+  if ((++dcount % 100) == 0) {
+//    Serial.print(tickPositionLeft); Serial.print("\t");
+//    Serial.print(tickPositionRight); Serial.print("\t");
+    Serial.print(x); Serial.print("\t");
+    Serial.println();
   }
 }
 

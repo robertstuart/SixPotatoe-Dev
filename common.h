@@ -1,8 +1,8 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-const int WRITE_BUF_SIZE = 11;
-const int READ_BUF_SIZE = 7;
+const int AP_BUF_SIZE = 21;  // Arduino to Pi buffer
+const int PA_BUF_SIZE = 8;   // Pi to Arduino buffer
 
 // Responses from Due to Pi.  All responses are 6 bytes.
 const int RESP_MARK       =  0;   // Null response.
@@ -26,10 +26,12 @@ const int SEND_BATT        = 137;
 const int SEND_STATE       = 138;
 
 // Receive from controller to Arduino and Arduino to PI
-const int RCV_JOYX         = 129;
-const int RCV_JOYY         = 130;
+//const int RCV_JOYX         = 129;
+//const int RCV_JOYY         = 130;
 const int RCV_RUN          = 131;
 const int RCV_BUTTON1      = 132;
+const int RCV_JOYX_I       = 160;
+const int RCV_JOYY_I       = 161;
 
 // Just Arduino to PI
 const int AP_BATT          = 201;
