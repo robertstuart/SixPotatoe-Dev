@@ -1,25 +1,38 @@
-#include <Wire.h>
+//#include <Wire.h>
+#include <i2c_t3.h>
 #include "common.h"
-#include <digitalWriteFast.h>
+//#include <digitalWriteFast.h>
 
+// Function prototypes
+void receiveEvent(size_t count);
+void requestEvent(void);
+
+//#define BATT_PIN        A0
+//#define DIR_RIGHT_PIN    7
+//#define DIR_LEFT_PIN     8
+//#define PWM_RIGHT_PIN    9
+//#define PWM_LEFT_PIN    10
+//#define LED_PIN         13
+//#define ENC_A_RIGHT_PIN  2
+//#define ENC_A_LEFT_PIN   3
+//#define ENC_B_RIGHT_PIN  4
+//#define ENC_B_LEFT_PIN   5
 #define BATT_PIN        A0
-#define DIR_RIGHT_PIN    7
-#define DIR_LEFT_PIN     8
-#define PWM_RIGHT_PIN    9
-#define PWM_LEFT_PIN    10
+#define DIR_RIGHT_PIN    6
+#define DIR_LEFT_PIN     5
+#define PWM_RIGHT_PIN    4
+#define PWM_LEFT_PIN     3
 #define LED_PIN         13
-#define ENC_A_RIGHT_PIN  2
-#define ENC_A_LEFT_PIN   3
-#define ENC_B_RIGHT_PIN  4
-#define ENC_B_LEFT_PIN   5
+#define ENC_A_RIGHT_PIN 10
+#define ENC_A_LEFT_PIN   8
+#define ENC_B_RIGHT_PIN  9
+#define ENC_B_LEFT_PIN   7
 
 const float ENC_FACTOR = 381.7f;  // Change pulse width to fps speed, 1/29 gear
 const long ENC_FACTOR_M = 3817000L;  // Change pulse width to milli-fps speed
 
-volatile char piReceivedMessage[PA_BUF_SIZE];
+char piReceivedMessage[PA_BUF_SIZE];
 volatile bool isPiMessage = false;
-
-boolean isDebugSerial = false;  // true if XBEE connect to serial rather than to computer via usb
 
 int xBeeMsgType = 0;
 short joyX = 22;
@@ -32,11 +45,11 @@ unsigned long timeMilliseconds = 0UL;
 unsigned long timeMicroseconds = 0UL;
 boolean isRunning = true;
 
-unsigned long x = 0;
-
 float sendBatt = 0.0;
 float sendFps = 0.0;
 unsigned short sendStatus = 0;
+
+int bCount = 0;
 
 volatile long tickPositionRight = 0;
 volatile long tickPositionLeft = 0;
@@ -74,11 +87,13 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);
 
   motorInit();
-  Wire.begin(0X1c);
-  Wire.setClock(400000);   // Any effect on slave?
+//  Wire.begin(0X1c);
+//  Wire.setClock(400000);   // Any effect on slave?
+  Wire.begin(I2C_SLAVE, 0X1c, I2C_PINS_18_19, I2C_PULLUP_EXT, 400000);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(requestEvent);
-  Serial.begin(57600);  // For XBee
+  Serial1.begin(57600);  // For XBee
+  Serial.begin(115200);
 }
 
 
@@ -87,19 +102,28 @@ void setup() {
  * loop()
  ******************************************************************************/
 void loop() {
-  static unsigned long t1 = 0;
-  unsigned long t2 = 0;
+  static unsigned long bTrigger = 0;
+//  static unsigned long t1 = 0;
+//  unsigned long t2 = 0;
   timeMicroseconds = micros();
   timeMilliseconds = millis();
   readXBee();
   if (isPiMessage) {
+//    debug();
     isPiMessage = false;
     parsePiMessage();
     prepareSendPacket();
     batt();
     blinkLed();
-//    debug();
   }
+
+  unsigned long t = millis();
+  if (t > bTrigger) {
+    bTrigger = t + 1000;
+    Serial.print(bCount); Serial.print(" ");
+    Serial.println(t / 1000);
+  }
+  
 }
 
 
@@ -175,9 +199,9 @@ void batt() {
 void debug() {
   static int dcount = 0;
   if ((++dcount % 100) == 0) {
-//    Serial.print(tickPositionLeft); Serial.print("\t");
-//    Serial.print(tickPositionRight); Serial.print("\t");
-    Serial.print(x); Serial.print("\t");
+    Serial.print(tickCountLeft); Serial.print("\t");
+    Serial.print(tickCountRight); Serial.print("\t");
+    Serial.print(joyX); Serial.print("\t");
     Serial.println();
   }
 }

@@ -23,8 +23,8 @@ void readXBee() {
 
 //  if (isDebugSerial) return;
   
-  while (Serial.available() > 0) {
-    byte b = Serial.read();
+  while (Serial1.available() > 0) {
+    byte b = Serial1.read();
     if (b == 0x7e) {
       rcvPacketCount = 0;
       rcvDataFramePtr = 0;
@@ -115,8 +115,8 @@ void doRFData() {
  ******************************************************************************/
 void doMsg(int cmd, char msgStr[], int count, boolean isHc) {
   int intVal;
-  float floatVal;
-  boolean booleanVal;
+//  float floatVal;
+//  boolean booleanVal;
   String ss;
 //static int part = 0;
 //part = ++part % 4;
@@ -138,12 +138,6 @@ void doMsg(int cmd, char msgStr[], int count, boolean isHc) {
   msgStr[count] = 0; // Just to be sure.
   switch (cmd) {
     case RCV_JOYX_I:
-//joyX = msgStr[0];
-//joyY = msgStr[1];
-//tickPositionRight = msgStr[2];
-//tickPositionLeft = msgStr[3];
-//tickCountRight = msgStr[4];
-//tickCountLeft = msgStr[5];
       if (sscanf(msgStr, "%d", &intVal) > 0) {
         joyX = intVal;
       }
@@ -331,7 +325,7 @@ void xTransmitUartFrame(byte dataFrame[], int dataFrameLength) {
       uartXmitFrame[oPtr++] = b;
     }
   }
-//  XBEE_SER.write(uartXmitFrame, oPtr);
+  Serial1.write(uartXmitFrame, oPtr);
 }
 
 

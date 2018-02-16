@@ -3,16 +3,16 @@
 
 
 /*******************************************************************************
- * prepareSendPacket() Prepare the packet to be sent on the next
- *                     requestEvent().
+   prepareSendPacket() Prepare the packet to be sent on the next
+                       requestEvent().
  ******************************************************************************/
 void prepareSendPacket() {
   static int part = 0;
   byte xBeeCmd = 0;
   short xBeeVal = 0;
-  
+
   part = ++part % 5;
-  switch (part) {              // 
+  switch (part) {              //
     case 0: // joyx
       xBeeCmd = RCV_JOYX_I;
       xBeeVal = joyX;
@@ -43,7 +43,7 @@ void prepareSendPacket() {
   long sRight = tickSumRight;
   long sLeft = tickSumLeft;
   byte cRight = (byte) tickCountRight;
-  byte cLeft = (byte) tickCountRight;
+  byte cLeft = (byte) tickCountLeft;
   long ttRight = tickTimeRight;
   long ttLeft = tickTimeLeft;
   tickSumRight = 0L;
@@ -51,7 +51,7 @@ void prepareSendPacket() {
   tickCountRight = 0L;
   tickCountLeft = 0L;
   interrupts();
-  
+
   unsigned long tPoll = micros();
   if (cRight == 0) sRight = tPoll - ttRight;
   if (cLeft == 0) sLeft = tPoll - ttLeft;
@@ -89,69 +89,50 @@ void putByte(byte bVal) {
    receiveEvent() Called on interrupt when i2c byte received
                   Set isNewPiMsg when a complete 8-byte checksummed received.
  ******************************************************************************/
-void receiveEvent(int numBytes) {
-  static int p = 0;
-  static byte readBuf[PA_BUF_SIZE];
-  static unsigned int count = 0;
+//void receiveEvent(int numBytes) {
+void receiveEvent(size_t numBytes) {
+//
+  Wire.read(piReceivedMessage, numBytes);
+  bCount = numBytes;
+  isPiMessage = true;  
 
-  while (Wire.available()) {
-    byte c = Wire.read();
-//    Serial.print((int) c); Serial.print(' ');
-//    if ((++p % 8) == 0) Serial.println();
-    readBuf[count++] = c;
-    if (count >= PA_BUF_SIZE) {
-      int sum = 0;
-      for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {
-        sum += readBuf[i];
-      }
-      sum &= 0xFF;
-//      Serial.print(sum); Serial.println();
-      if (sum == readBuf[PA_BUF_SIZE - 1]) {    // Correct checksum?
-        for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {    //     yes
-          piReceivedMessage[i] = readBuf[i];
-        }
-        isPiMessage = true;
-        count = 0;
-      } else { // Incorrect checksum.  Shift left and try on next character.
-        for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {
-          readBuf[i] = readBuf[i + 1];
-        }
-        count--;
-      }
-    }
-  }
+//  static byte readBuf[PA_BUF_SIZE];
+//  static unsigned int count = 0;
+//
+//  while (Wire.available()) {
+//    byte c = Wire.read();
+//    //    Serial.print((int) c); Serial.print(' ');
+//    //    if ((++p % 8) == 0) Serial.println();
+//    readBuf[count++] = c;
+//    if (count >= PA_BUF_SIZE) {
+//      int sum = 0;
+//      for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {
+//        sum += readBuf[i];
+//      }
+//      sum &= 0xFF;
+//      //      Serial.print(sum); Serial.println();
+//      if (sum == readBuf[PA_BUF_SIZE - 1]) {    // Correct checksum?
+//        for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {    //     yes
+//          piReceivedMessage[i] = readBuf[i];
+//        }
+//        isPiMessage = true;
+//        count = 0;
+//      } else { // Incorrect checksum.  Shift left and try on next character.
+//        for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {
+//          readBuf[i] = readBuf[i + 1];
+//        }
+//        count--;
+//      }
+//    }
+//  }
 }
 
 
-  /*******************************************************************************
-     requestEvent() Called on interrupt when request for a byte is received.
-   ******************************************************************************/
-  void requestEvent() {
-    unsigned long t1, t2;
-    
-    t2 = micros();
-    Wire.write(sendPacket,AP_BUF_SIZE);
-    t1 = micros();
-    x = t1 - t2;
-//    Wire.write(sendPacket,21);
-//    Serial.println(timeMilliseconds);
-  }
 
-
-
-  /*******************************************************************************
-     readPacket()
-   ******************************************************************************/
-  //void readPacket() {
-  //}
-
-
-
-  /*******************************************************************************
-     writePacket()
-   ******************************************************************************/
-  //void writePacket() {
-  //}
-
-
+/*******************************************************************************
+   requestEvent() Called on interrupt when request for a byte is received.
+ ******************************************************************************/
+void requestEvent() {
+  Wire.write(sendPacket, AP_BUF_SIZE);
+}
 

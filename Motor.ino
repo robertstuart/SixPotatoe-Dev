@@ -1,8 +1,8 @@
 
 void motorInit() {
-  TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
-  //TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
-  //TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz (The DEFAULT
+//  TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
+//  //TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
+//  //TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz (The DEFAULT
   pinMode(DIR_RIGHT_PIN, OUTPUT);
   pinMode(DIR_LEFT_PIN, OUTPUT);
   pinMode(ENC_A_RIGHT_PIN, INPUT);
@@ -12,6 +12,8 @@ void motorInit() {
 
   digitalWrite(DIR_RIGHT_PIN, LOW);
   digitalWrite(DIR_LEFT_PIN, LOW);
+  analogWriteFrequency(PWM_RIGHT_PIN, 20000);
+  analogWriteFrequency(PWM_LEFT_PIN, 20000);
   analogWrite(PWM_RIGHT_PIN, 0);
   analogWrite(PWM_LEFT_PIN, 0);
 
@@ -29,12 +31,12 @@ void encoderIsrRight() {
   static boolean encBStat;
   long tickPeriodRight;
 
-  boolean encA = (digitalReadFast(ENC_A_RIGHT_PIN) == HIGH) ? true : false;
+  boolean encA = (digitalRead(ENC_A_RIGHT_PIN) == HIGH) ? true : false;
   if (encA == encAStat) return;  // Ignore bogus interrupts
   encAStat = encA;
   unsigned long lastTickTime = tickTimeRight;
   tickTimeRight = micros();
-  boolean encB = (digitalReadFast(ENC_B_RIGHT_PIN) == HIGH) ? true : false;
+  boolean encB = (digitalRead(ENC_B_RIGHT_PIN) == HIGH) ? true : false;
   if (encB == encBStat) return;  // Ignore reversal of direction
   encBStat = encB;
 
@@ -63,12 +65,12 @@ void encoderIsrLeft() {
   static boolean encBStat;
   long tickPeriodLeft;
 
-  boolean encA = (digitalReadFast(ENC_A_LEFT_PIN) == HIGH) ? true : false;
+  boolean encA = (digitalRead(ENC_A_LEFT_PIN) == HIGH) ? true : false;
   if (encA == encAStat) return;  // Ignore bogus interrupts
   encAStat = encA;
   unsigned long lastTickTime = tickTimeLeft;
   tickTimeLeft = micros();
-  boolean encB = (digitalReadFast(ENC_B_LEFT_PIN) == HIGH) ? true : false;
+  boolean encB = (digitalRead(ENC_B_LEFT_PIN) == HIGH) ? true : false;
   if (encB == encBStat) return;  // Ignore reversal of direction.
   encBStat = encB;
 
@@ -97,7 +99,7 @@ void setMotorRight(int pw, bool isFwd) {
   if (!isRunning) pw = 0;
   if (pw > 255) pw = 255;
   else if (pw < 0) pw = 0;
-  digitalWriteFast(DIR_RIGHT_PIN, (isFwd) ? HIGH : LOW)
+  digitalWrite(DIR_RIGHT_PIN, (isFwd) ? HIGH : LOW);
   analogWrite(PWM_RIGHT_PIN, pw);
 }
 
@@ -105,6 +107,6 @@ void setMotorLeft(int pw, bool isFwd) {
   if (!isRunning) pw = 0;
   if (pw > 255) pw = 255;
   else if (pw < 0) pw = 0;
-  digitalWriteFast(DIR_LEFT_PIN, (isFwd) ? LOW : HIGH)
+  digitalWrite(DIR_LEFT_PIN, (isFwd) ? LOW : HIGH);
   analogWrite(PWM_LEFT_PIN, pw);
 }
