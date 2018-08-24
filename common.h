@@ -1,8 +1,8 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-const int AP_BUF_SIZE = 21;  // Arduino to Pi buffer
-const int PA_BUF_SIZE = 255;   // Pi to Arduino buffer
+const int AP_BUF_SIZE = 20;  // Arduino to Pi buffer
+const int PA_BUF_SIZE = 4;   // Pi to Arduino buffer
 
 // Responses from Due to Pi.  All responses are 6 bytes.
 const int RESP_MARK       =  0;   // Null response.

@@ -1,5 +1,5 @@
-//#include <Wire.h>
-#include <i2c_t3.h>
+#include <Wire.h>
+//#include <i2c_t3.h>
 #include "common.h"
 //#include <digitalWriteFast.h>
 
@@ -7,16 +7,6 @@
 void receiveEvent(size_t count);
 void requestEvent(void);
 
-//#define BATT_PIN        A0
-//#define DIR_RIGHT_PIN    7
-//#define DIR_LEFT_PIN     8
-//#define PWM_RIGHT_PIN    9
-//#define PWM_LEFT_PIN    10
-//#define LED_PIN         13
-//#define ENC_A_RIGHT_PIN  2
-//#define ENC_A_LEFT_PIN   3
-//#define ENC_B_RIGHT_PIN  4
-//#define ENC_B_LEFT_PIN   5
 #define BATT_PIN        A0
 #define DIR_RIGHT_PIN    6
 #define DIR_LEFT_PIN     5
@@ -32,11 +22,11 @@ const float ENC_FACTOR = 381.7f;  // Change pulse width to fps speed, 1/29 gear
 const long ENC_FACTOR_M = 3817000L;  // Change pulse width to milli-fps speed
 
 char piReceivedMessage[PA_BUF_SIZE];
+volatile bool isPiNeedsNew = false;
 volatile bool isPiMessage = false;
 
-int xBeeMsgType = 0;
-short joyX = 22;
-short joyY = 33;
+short joyX = 0;
+short joyY = 0;
 byte stateRun = 0;
 byte stateButton1 = 0;
 float battVolt = 0.0;
@@ -87,12 +77,11 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);
 
   motorInit();
-//  Wire.begin(0X1c);
-//  Wire.setClock(400000);   // Any effect on slave?
-  Wire.begin(I2C_SLAVE, 0X1c, I2C_PINS_18_19, I2C_PULLUP_EXT, 400000);
+  Wire.begin(0X1c);
+  Wire.setClock(400000);   // Any effect on slave?
+//  Wire.begin(I2C_SLAVE, 0X1c, I2C_PINS_18_19, I2C_PULLUP_EXT, 400000);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(requestEvent);
-  Serial1.begin(57600);  // For XBee
   Serial.begin(115200);
 }
 
@@ -102,36 +91,25 @@ void setup() {
  * loop()
  ******************************************************************************/
 void loop() {
-  static unsigned long bTrigger = 0;
-//  static unsigned long t1 = 0;
-//  unsigned long t2 = 0;
   timeMicroseconds = micros();
   timeMilliseconds = millis();
-  readXBee();
-  if (isPiMessage) {
-//    debug();
-    isPiMessage = false;
-    parsePiMessage();
+  if (isPiNeedsNew) {
     prepareSendPacket();
+  }
+  if (isPiMessage) {
+    parsePiMessage();
     batt();
     blinkLed();
   }
-
-  unsigned long t = millis();
-  if (t > bTrigger) {
-    bTrigger = t + 1000;
-    Serial.print(bCount); Serial.print(" ");
-    Serial.println(t / 1000);
-  }
-  
 }
 
 
 
 /*******************************************************************************
- * parsePiMessage()           
+ * parsePiMessage() New message from Pi received.     
  ******************************************************************************/
 void parsePiMessage() {
+  isPiMessage = false;
   
   // Right motor direction and pw
   boolean rDir = (piReceivedMessage[0] == 0) ? false : true;
@@ -142,23 +120,6 @@ void parsePiMessage() {
   boolean lDir = (piReceivedMessage[2] == 0) ? false : true;
   byte lPw = piReceivedMessage[3];
   setMotorLeft(lPw, lDir);
-
-  // Message to be sent to Xbee
-  byte xBeeCmd = piReceivedMessage[4];
-  short xBeeVal = (piReceivedMessage[5] & 0XFF) << 8;
-  xBeeVal |= (piReceivedMessage[6] & 0XFF);
-  switch(xBeeCmd) {  // Message to be sent to XBee
-    case SEND_FPS:
-      sendFps = ((float) xBeeVal) * 0.01;
-      break;
-    case SEND_BATT:
-      sendBatt = ((float) xBeeVal) * 0.01;
-      break;
-    case SEND_STATE:
-      sendStatus = xBeeVal;
-      break;
-  }
-//  debug2(rDir, rPw, lDir, lPw);
 }
 
 void debug2(boolean rDir, byte rPw, boolean lDir, byte lPw) {
@@ -191,8 +152,7 @@ void batt() {
   static unsigned long battTrigger = 0;
   if (timeMilliseconds > battTrigger) {
     battTrigger = timeMilliseconds + 1000;
-    battVolt = ((float) analogRead(BATT_PIN)) * .022;
-    battRaw = (short) (battVolt * 100.0);
+    battRaw = analogRead(BATT_PIN);
   }
 }
 

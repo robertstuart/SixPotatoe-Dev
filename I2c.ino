@@ -7,36 +7,8 @@
                        requestEvent().
  ******************************************************************************/
 void prepareSendPacket() {
-  static int part = 0;
-  byte xBeeCmd = 0;
-  short xBeeVal = 0;
-
-  part = ++part % 5;
-  switch (part) {              //
-    case 0: // joyx
-      xBeeCmd = RCV_JOYX_I;
-      xBeeVal = joyX;
-      break;
-    case 1: // joyy
-      xBeeCmd = RCV_JOYY_I;
-      xBeeVal = joyY;
-      break;
-    case 2: // batt
-      xBeeCmd = AP_BATT;
-      xBeeVal = battRaw;
-      break;
-    case 3: // run
-      xBeeCmd = RCV_RUN;
-      xBeeVal = ((short) (stateRun == true) ? 1 : 0);
-      break;
-    case 4: // button1
-      xBeeCmd = RCV_BUTTON1;
-      xBeeVal = ((short) (stateButton1 == true) ? 1 : 0);
-      break;
-    default:
-      break;
-  }
-
+  isPiNeedsNew = false;
+  
   noInterrupts();
   long tRight = tickPositionRight;
   long tLeft = tickPositionLeft;
@@ -52,6 +24,7 @@ void prepareSendPacket() {
   tickCountLeft = 0L;
   interrupts();
 
+  // Put time since the last tick if there have been no ticks.
   unsigned long tPoll = micros();
   if (cRight == 0) sRight = tPoll - ttRight;
   if (cLeft == 0) sLeft = tPoll - ttLeft;
@@ -63,8 +36,7 @@ void prepareSendPacket() {
   putLong(sLeft);    // 16
   putByte(cRight);   // 17
   putByte(cLeft);    // 18
-  putByte(xBeeCmd);  // 19
-  putShort(xBeeVal); // 21
+  putShort(battRaw); // 20
 }
 
 void putLong(long lVal) {
@@ -86,45 +58,22 @@ void putByte(byte bVal) {
 
 
 /*******************************************************************************
-   receiveEvent() Called on interrupt when i2c byte received
+   receiveEvent() Called on interrupt when i2c messager received
                   Set isNewPiMsg when a complete 8-byte checksummed received.
  ******************************************************************************/
-//void receiveEvent(int numBytes) {
-void receiveEvent(size_t numBytes) {
-//
-  Wire.read(piReceivedMessage, numBytes);
-  bCount = numBytes;
-  isPiMessage = true;  
+void receiveEvent(int numBytes) {
+  int i = 0;
+  while (Wire.available()) {
+    if (i < PA_BUF_SIZE) {
+      piReceivedMessage[i++] = Wire.read();
+    }
+  }
 
-//  static byte readBuf[PA_BUF_SIZE];
-//  static unsigned int count = 0;
-//
-//  while (Wire.available()) {
-//    byte c = Wire.read();
-//    //    Serial.print((int) c); Serial.print(' ');
-//    //    if ((++p % 8) == 0) Serial.println();
-//    readBuf[count++] = c;
-//    if (count >= PA_BUF_SIZE) {
-//      int sum = 0;
-//      for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {
-//        sum += readBuf[i];
-//      }
-//      sum &= 0xFF;
-//      //      Serial.print(sum); Serial.println();
-//      if (sum == readBuf[PA_BUF_SIZE - 1]) {    // Correct checksum?
-//        for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {    //     yes
-//          piReceivedMessage[i] = readBuf[i];
-//        }
-//        isPiMessage = true;
-//        count = 0;
-//      } else { // Incorrect checksum.  Shift left and try on next character.
-//        for (int i = 0; i < (PA_BUF_SIZE - 1); i++) {
-//          readBuf[i] = readBuf[i + 1];
-//        }
-//        count--;
-//      }
-//    }
-//  }
+  if (numBytes == 1) {
+    isPiNeedsNew = true; 
+  } else {
+    isPiMessage = true;
+  }
 }
 
 
