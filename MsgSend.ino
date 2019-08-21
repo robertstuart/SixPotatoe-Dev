@@ -8,13 +8,14 @@ int rfDataPtr = 0;
  *****************************************************************************/
 void sendStatusXBeeHc() {
   static int part = 0;
-  part = ++part % 2;
+  part++;
+  part = part % 2;
   switch (part) {
     case 0:
       sendXMsg(SEND_FPS, 2, wFps);
       break;
     case 1:
-      sendXMsg(SEND_BATT_A, 2, battVolt);
+      sendXMsg(SEND_BATT, 2, battVolt);
       break;
     default:
       break;
@@ -102,7 +103,8 @@ void xTransmitRequest(int dest, byte rfFrame[], int rfLength) {
   static byte txRequestDataFrame[100];
   static int frameId = 0;
   unsigned int sh, sl;
-  frameId = ++frameId % 200;   // ID cycles 1-200
+  frameId++;
+  frameId = frameId % 200;   // ID cycles 1-200
   if (dest == XBEE_DEST_C1) {
     sh = XBEE_C1_SH;
     sl = XBEE_C1_SL;

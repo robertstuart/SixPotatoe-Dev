@@ -1,6 +1,4 @@
 
-//const int BATTERY_WARNING = 1090;  // about 10% capacity (centivolts)
-//const int BATTERY_CRITICAL = 1000; // about 1% cap (centivolts)
 const int BATTERY_WARNING = 726;  // about 10% capacity (centivolts)
 const int BATTERY_CRITICAL = 666; // about 1% cap (centivolts)
 
@@ -103,7 +101,7 @@ void setLedStates() {
   if (isRouteInProgress){
     yellowPattern = (isRunning) ? BLINK_ON : BLINK_FF;
   } else if (isRunReady && isRunning) {
-    yellowPattern = BLINK_ON;
+    setLedStates = BLINK_ON;
   } else if (isRunReady && !isRunning) {
     yellowPattern = BLINK_FF;
   } else {
@@ -171,8 +169,6 @@ void battery() {
  *  blink() 
  ******************************************************************************/
 void blinkLed() {
-  static int routeCycle = 0; //
-  static int routeOffCount = 0;
   static unsigned long blinkTrigger = 0L;
   if (timeMilliseconds > blinkTrigger) {
     blinkTrigger = timeMilliseconds + 100;  // 10 per second
@@ -380,5 +376,3 @@ double rangeAngle(double angle) {
   while (angle <= -180.0) angle += 360.0;
   return angle;
 }
-
-

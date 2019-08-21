@@ -315,7 +315,8 @@ void setDrift(float xAve, float yAve, float zAve) {
   yAveArray[avePtr] = yAve;
   zAveArray[avePtr] = zAve;
 
-  avePtr = ++avePtr % AVE_SIZE;
+  avePtr++;
+  avePtr = avePtr % AVE_SIZE;
   if (aveTotal < avePtr) aveTotal = avePtr;
 
   for (int i = 0; i < aveTotal; i++) {

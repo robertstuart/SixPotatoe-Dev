@@ -77,8 +77,6 @@ const double ACCEL_TO_FPS = 0.06;
 void tpAlgorithm() {
   if (!isHcActive) joyX = joyY = 0.0;
       
-  static double lpfAccelFpsOld = 0.0;
-//  static double tp7OldSpeedError = 0.0;
   static double oldAccelFps = 0.0D;
  
   // Compute Center of Oscillation speed (cos)
@@ -207,8 +205,9 @@ void gettingUp() {
  *****************************************************************************/
 void setGetDown() {
   if (isUpright && isRunning) {
-    gettingDownStartTime = timeMilliseconds;
-    isGettingDown = true;
+    isRunReady = false;
+//    gettingDownStartTime = timeMilliseconds;
+//    isGettingDown = true;
   }
 }
 
@@ -260,4 +259,3 @@ void log104PerSec() {
 
 void log208PerSec() {
 }
-

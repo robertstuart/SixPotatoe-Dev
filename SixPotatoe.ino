@@ -1,6 +1,6 @@
 #include <Wire.h>
 #include <LSM6.h>
-#include "Common.h"
+#include "Ma_HC.h"
 #include "TeensyUp.h"
 
 const float GYRO_SENS = 0.0696;      // Multiplier to get degrees. 
@@ -244,4 +244,3 @@ void testFps() {
     }
   }
 }
-

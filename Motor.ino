@@ -1,10 +1,10 @@
 /******************************************************************************
- *  Motor.ino
+    Motor.ino
  ***********************************************************************/
 
 
 /******************************************************************************
- *  motorInit()
+    motorInit()
  *****************************************************************************/
 void motorInit() {
   pinMode(DIR_RIGHT_PIN, OUTPUT);
@@ -13,7 +13,7 @@ void motorInit() {
   pinMode(ENC_A_LEFT_PIN, INPUT);
   pinMode(ENC_B_RIGHT_PIN, INPUT);
   pinMode(ENC_B_LEFT_PIN, INPUT);
-  
+
   analogWriteFrequency(PWM_RIGHT_PIN, 20000);
   analogWriteFrequency(PWM_LEFT_PIN, 20000);
 
@@ -29,7 +29,7 @@ void motorInit() {
 // Use digitalWrite/ReadFast()? ????????????????????????????????????????????????????
 
 /******************************************************************************
- * encoderIsr???()
+   encoderIsr???()
  *****************************************************************************/
 void encoderIsrRight() {
   static boolean encAStat;
@@ -63,7 +63,7 @@ void encoderIsrRight() {
 
 
 /**************************************************************************.
- * encoderIsrLeft()
+   encoderIsrLeft()
  **************************************************************************/
 void encoderIsrLeft() {
   static boolean encAStat;
@@ -98,7 +98,7 @@ void encoderIsrLeft() {
 
 
 /******************************************************************************
- * readSpeed????()  Called every loop from CheckMotor???
+   readSpeed????()  Called every loop from CheckMotor???
  *****************************************************************************/
 void readSpeedRight() {
   noInterrupts();
@@ -114,7 +114,7 @@ void readSpeedRight() {
       if (newMFps < wMFpsRight) wMFpsRight = newMFps; // Set new if lower
     } else {
       if (newMFps > wMFpsRight) wMFpsRight = newMFps; // Set new if lower
-    } 
+    }
   } else {
     wMFpsRight = (ENC_FACTOR_M * count) / sum;
   }
@@ -140,23 +140,22 @@ void readSpeedLeft() {
   else {
     wMFpsLeft = (ENC_FACTOR_M * count) / sum;
   }
- wFpsLeft = ((float) wMFpsLeft) / 1000.0;
+  wFpsLeft = ((float) wMFpsLeft) / 1000.0;
 }
 
 
 /******************************************************************************
- * checkMotors()
+   checkMotors()
  *****************************************************************************/
 void checkMotors() {
-  static unsigned int pollCount;
-    checkMotorRight();
-    checkMotorLeft();
-    wFps = (wFpsLeft + wFpsRight) / 2.0;
-    wMFps = (wMFpsRight + wMFpsLeft) / 2;
+  checkMotorRight();
+  checkMotorLeft();
+  wFps = (wFpsLeft + wFpsRight) / 2.0;
+  wMFps = (wMFpsRight + wMFpsLeft) / 2;
 }
 
 /******************************************************************************
- * checkMotor????()  Called every loop
+   checkMotor????()  Called every loop
  *****************************************************************************/
 void checkMotorRight() {
   float motorGain = MOTOR_GAIN;
@@ -168,7 +167,7 @@ void checkMotorRight() {
   }
   float wsTarget = targetWFpsRight + (wsError * motorGain);  // Target speed to correct error
   float pw = abs(wsTarget * FPS_TO_PW) + DEAD_ZONE;            // Pw for the target.
-  if (pw <= DEAD_ZONE) pw = 0; 
+  if (pw <= DEAD_ZONE) pw = 0;
   setMotorRight(pw, wsTarget > 0.0);
 }
 
@@ -182,13 +181,13 @@ void checkMotorLeft() {
   }
   float wsTarget = targetWFpsLeft + (wsError * motorGain);  // Target speed to correct error
   float pw = abs(wsTarget * FPS_TO_PW) + DEAD_ZONE;            // Pw for the target.
-  if (pw <= DEAD_ZONE) pw = 0; 
+  if (pw <= DEAD_ZONE) pw = 0;
   setMotorLeft(pw, wsTarget > 0.0);
 }
 
 
 /*******************************************************************************
- * setMotor????() Set pw and diriction. pw between 0-255
+   setMotor????() Set pw and diriction. pw between 0-255
  ******************************************************************************/
 void setMotorRight(int pw, bool isFwd) {
   if (!isRunning  || isMotorDisable) pw = 0;
