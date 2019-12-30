@@ -179,48 +179,12 @@ void doHcMsg(int cmd, char msgStr[], int count, boolean isHc) {
         doHcButton(button, isPress, isShift, isCtrl);
       }
       break;
-    //    case RCV_RUN:
-    //      if (sscanf(msgStr, "%d", &intVal) > 0) {
-    //        isRunReady = !isRunReady;
-    //      }
-    //      break;
-    //      break;
-    //    case RCV_V1: // Set this to point to intended variable.
-    //      if (sscanf(msgStr, "%d", &intVal) > 0) {
-    //        float inc = 0.1;
-    //        ACCEL_PITCH_OFFSET = ACCEL_PITCH_OFFSET + ((intVal == 0) ?  -inc :  inc);
-    //        snprintf(message, MSG_SIZE, "Offset: %4.1f", ACCEL_PITCH_OFFSET);
-    //        sendXMsg(SEND_MESSAGE, message);
-    //        Serial.println(ACCEL_PITCH_OFFSET);
-    //      }
-    //      break;
-    //    case RCV_V2: // Set this to point to intended variable.
-    //      if (sscanf(msgStr, "%d", &intVal) > 0) {
-    //        float inc = 0.1;
-    ////        tp7.z = (intVal == 0) ? tp7.z - inc : tp7.z + inc;
-    //      }
-    //      break;
-    //    case RCV_KILL_UP:
-    //      if (sscanf(msgStr, "%d", &intVal) > 0) {
-    //        if (intVal == 0) sendUMsg(TOUP_KILL_UP, 0);
-    //      }
-    //      break;
-    //    case RCV_MOT_DISABLE:
-    //      if (sscanf(msgStr, "%d", &intVal) > 0) {
-    //        if (intVal == 0) isMotorDisable = !isMotorDisable;
-    //      }
-    //      break;
-    //    case RCV_GET_UP:
-    //      setGetUp();
-    //      break;
-    //    case RCV_GET_DOWN:
-    //      setGetDown();
-    //      break;
-    default:
+     default:
       Serial.print("Illegal message received: "); Serial.println(cmd);
       break;
   }
 }
+
 
 /******************************************************************************
     doUpMsg()
@@ -297,26 +261,24 @@ void doUpMsg(int cmd, char msgStr[], int count) {
    doHcButton()  Button press on hand controller
 *****************************************************************************/
 void doHcButton(int button, boolean isPress, boolean isShift, boolean isCtrl) {
-  sprintf(message, "%3d %3d %3d %3d", button, isPress, isShift, isCtrl);
-  Serial.println(message);
   if (!isShift && !isCtrl) { // Neither shift nor control pressed
     switch (button) {
       case BUTTON_1L:   // Run
-        isRunReady = !isRunReady;
+        isRunReady = true;
         break;
-      case BUTTON_1M:   // Start log
+      case BUTTON_1M:  
+        isRunReady = false;
         break;
       case BUTTON_1R:
         break;
-      case BUTTON_2L:   // Get up
-        setGetUp();
+      case BUTTON_2L:   
         break;
-      case BUTTON_2M:   // Stop log
+      case BUTTON_2M:   // Get up
+        setGetUp();
         break;
       case BUTTON_2R:
         break;
       case BUTTON_3L:   // Get down
-        setGetDown();
         break;
       case BUTTON_3M:
         break;

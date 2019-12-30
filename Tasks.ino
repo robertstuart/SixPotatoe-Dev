@@ -101,7 +101,7 @@ void setLedStates() {
   if (isRouteInProgress){
     yellowPattern = (isRunning) ? BLINK_ON : BLINK_FF;
   } else if (isRunReady && isRunning) {
-    setLedStates = BLINK_ON;
+    yellowPattern = BLINK_ON;
   } else if (isRunReady && !isRunning) {
     yellowPattern = BLINK_FF;
   } else {
