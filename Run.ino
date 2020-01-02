@@ -18,41 +18,15 @@ float speedAdjustment = 0.0;
  *  run() Continuous loop for doing all tasks.
  *****************************************************************************/
 void run() {
-  boolean isGyroRead = false;
-  boolean isAccRead = false;
-  timeMicroseconds = micros();
-  timeMilliseconds = millis();
   delay(200); // For switches?
-  setHeading(0.0D);
-  resetTicks();
-  beep(BEEP_UP);
-  unsigned long timeoutTrigger = millis();
+  setBlink(LED_PIN, 50, 500);
   while(true) { // main loop
     commonTasks();
     // Add code to timeout in imu read!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if (isNewGyro()) {
-      setGyroData();
-      isGyroRead = true;
-    }
-    readUp(); // Get latest.
-    if (isNewAccel()) {
-      setAccelData();
-      isAccRead = true;
-    }
-    readUp();
-    bool isTimeout = timeMilliseconds > timeoutTrigger;
-    if (isTimeout) Serial.println("Imu timeout!");
-    bool isImuRead = isGyroRead && isAccRead;
-    if (isImuRead || isTimeout) {
-      isGyroRead = isAccRead = false;
-      timeoutTrigger = millis() + LOOP_TIMEOUT;
+    if (isNewImuData()) {
       if (isGettingUp) gettingUp();
-      else if (isGettingDown) gettingDown();
-      else tpAlgorithm(); 
+      else balance(); 
       checkMotors();
-      setNavigation();
-      doGyroDrift();
-      sendLog();
       safeAngle();
     } 
   }
@@ -60,55 +34,22 @@ void run() {
 
 
 
-//const int Y_BIAS = 0;
-//const double Y_ONE_G = -16500.0;
-//const double ACCEL_TO_SPEED = 0.000009;
-//const double COMP_TC = 0.98;
-//const double ACCEL_TC = 0.90;
-//const float COMP_TC = 0.0; // Cos only
-//const double FPS_ACCEL = 0.05;
 const double ZERO_ANGLE = 0.5;
-const double ONE_G_Y = -16530.0D;
-const double ONE_G_Z = 17029.0D;
-const double ACCEL_TO_FPS = 0.06;
 /***********************************************************************.
- *  tpAlgorithm() 
+ *  balance() 
  ***********************************************************************/
-void tpAlgorithm() {
-  if (!isHcActive) joyX = joyY = 0.0;
-      
-  static double oldAccelFps = 0.0D;
- 
+void balance() {
+       
   // Compute Center of Oscillation speed (cos)
   rotation3 = -gyroPitchDelta * CONST_COS_ROTATION;  // 4.5
 rotation3 = 0.0;
   cos3 = wFps + rotation3;
   // 0.92 .u value: 0.0 = no hf filtering, large values give slow response
-  lpfCos3 = (lpfCos3Old * CONST_COS_LPF) + (cos3 * (1.0D - CONST_COS_LPF));
-  lpfCos3Accel = lpfCos3 - lpfCos3Old;
-  lpfCos3Old = lpfCos3;
-
-  // Compute the acceleration speed
-  double rad = (gaPitch + ZERO_ANGLE) * DEG_TO_RAD;
-  double yG = ((double) lsm6.a.y) / ONE_G_Y;
-  double zG = ((double) lsm6.a.z) / ONE_G_Z;
-  double yAccel = -(((cos(rad) * yG) + (sin(rad) * zG)) * ACCEL_TO_FPS);
-  accelFps += yAccel;
-
-  if (!isRunning) accelFps = lpfAccelFps = 0.0;
-
-  // Complementary filter with COS. Try to minimizen jumping & loss of traction effects.
-  // 0.98, High value places more emphasis on accel.
-  double accelFpsDelta = accelFps - oldAccelFps;
-  oldAccelFps = accelFps;
-  coAccelFps += accelFpsDelta;
-  coAccelFps = (coAccelFps * CONST_ACCEL_LPF) + (lpfCos3 * (1.0 - CONST_ACCEL_LPF));
-
-  // Choose which of the computations to use.  Uncomment just one.
-  coFps = lpfCos3;
+  coFps = (lpfCos3Old * CONST_COS_LPF) + (cos3 * (1.0D - CONST_COS_LPF));
+  lpfCos3Old = coFps;
 
   // Get the controller target speed.
-  targetCoFps = (isRouteInProgress) ?  routeFps : (joyY * MAX_FPS * 0.01);
+  targetCoFps = controllerY * MAX_FPS * 0.01;
 
   // Find the speed error.  Constrain rate of change.
   float coFpsError = targetCoFps - coFps;
@@ -126,34 +67,11 @@ rotation3 = 0.0;
   // Add the angle error to the base speed to get the target wheel speed.
   targetWFps = fpsCorrection + coFps;
 
-  // These routines set the steering values.
-  if (isRouteInProgress) steerRoute(targetWFps);
-  else steer(targetWFps);
+  speedAdjustment = (((100.0 - abs(controllerY)) * 0.015) + 0.5) * ((float) controllerX * 0.01); 
+  targetWFpsRight = targetWFps - speedAdjustment;
+  targetWFpsLeft = targetWFps + speedAdjustment;
 
-} // end aTp7() 
-
-
-
-/***********************************************************************.
- *  steer() 
- ***********************************************************************/
-void steer(float fp) {
-  speedAdjustment = (((100.0 - abs(joyY)) * 0.015) + 0.5) * ((float) joyX * 0.01); 
-  targetWFpsRight = fp - speedAdjustment;
-  targetWFpsLeft = fp + speedAdjustment;
-//  targetWFpsRight = fp;
-//  targetWFpsLeft = fp;
-}
-
-
-
-/***********************************************************************.
- *  steerRoute() X value from Up is the speed difference between the wheels.
- ***********************************************************************/
-void steerRoute(float fp) {
-  targetWFpsRight = fp - routeFpsDiff;
-  targetWFpsLeft = fp + routeFpsDiff;
-}
+} // end balance() 
 
 
 
@@ -200,62 +118,18 @@ void gettingUp() {
 
 
 
-/******************************************************************************
- *  setGetDown()
- *****************************************************************************/
-void setGetDown() {
-  if (isUpright && isRunning) {
-    isRunReady = false;
-//    gettingDownStartTime = timeMilliseconds;
-//    isGettingDown = true;
-  }
-}
-
-
-/******************************************************************************
- *  gettingDown()
- *****************************************************************************/
-void gettingDown() {
-  
-}
-
-
 /***********************************************************************.
- *  sendLog() Called 208 times/sec.
+ *  sendLog() Called 200 times/sec.
+ *      Set modcount to 1 to log every loop. Set to 100 to log 
+ *      every 1/2 sec, etc.
  ***********************************************************************/
 void sendLog() {
+  static unsigned int modCount = 1;
   static unsigned int logLoop = 0;
   logLoop++;
-    
-//  if (!(logLoop % 104)) log2PerSec();
-//  if (!(logLoop % 21)) log10PerSec();
-//  routeLog(); //  208/sec
-//  if (!(logLoop % 10)) log20PerSec(); // 20/sec  
-//  if (!(logLoop % 2)) log104PerSec(); // 104/sec  
-//  if (isRouteInProgress  && isRunning)  log208PerSec();
-//  log208PerSec();
-}
 
-void log2PerSec() {
-//  Serial.print(isRouteInProgress);
-//  Serial.print(isUpright); Serial.print(isRunReady); Serial.print(isMotorDisable); Serial.print("\t");
-//  Serial.print(battVolt); Serial.print("\t");Serial.print(gPitch); Serial.print("\t");Serial.println(gPitch);
-//  Serial.print(isRunning); Serial.print(isRouteInProgress); Serial.println(isRunReady);
-}
-
-void log10PerSec() {
-  snprintf(message, MSG_SIZE, "gaPitch %4.2f   gHeading: %4.2f   gcHeading: %4.2f", gaPitch, gHeading, gcHeading);
-  Serial.println(message);
-}
-
-void log20PerSec() {
-//  sprintf(message,  "%5.2f\t%5.2f\t%5.2f\t", sonarLeft, sonarFront, sonarRight);
-//  sendBMsg(SEND_MESSAGE, message); 
-}
-
-void log104PerSec() {
-}
-
-
-void log208PerSec() {
+  if ((modCount % 1) == 0) {
+    // logging code here.
+  }
+  
 }

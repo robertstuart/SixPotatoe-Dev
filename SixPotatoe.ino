@@ -1,7 +1,9 @@
+
+const bool IS_SYSTEM_TEST = false;  // Set to be true to test the system.
+
 #include <Wire.h>
 #include <LSM6.h>
-#include "Ma_HC.h"
-#include "TeensyUp.h"
+
 
 const float GYRO_SENS = 0.0696;      // Multiplier to get degrees. 
 const float GYRO_WEIGHT = 0.997;
@@ -15,37 +17,27 @@ const float FPS_TO_PW = 17.5;
 const float DEAD_ZONE = 0.0;
 const float MAX_FPS = 10.0;
 
-#define XBEE_SER Serial1
+#define PWM_LEFT_PIN     14
+#define DIR_LEFT_PIN     16
+#define PWM_RIGHT_PIN    15
+#define DIR_RIGHT_PIN    17
 
-#define BATT_PIN        A0 // pin 14
-#define SPEAKER_PIN     30
+#define ENC_A_LEFT_PIN   20
+#define ENC_B_LEFT_PIN   22
+#define ENC_A_RIGHT_PIN  21
+#define ENC_B_RIGHT_PIN  23
 
-#define PWM_LEFT_PIN     3
-#define DIR_LEFT_PIN     4
-#define PWM_RIGHT_PIN    5
-#define DIR_RIGHT_PIN    6
+#define CH1_RADIO_PIN     2
+#define CH2_RADIO_PIN     3
+#define CH3_RADIO_PIN     4
+#define CH4_RADIO_PIN     5
+#define CH5_RADIO_PIN     6
+#define CH6_RADIO_PIN     7
 
-#define ENC_A_LEFT_PIN   7
-#define ENC_B_LEFT_PIN   8
-#define ENC_A_RIGHT_PIN  9
-#define ENC_B_RIGHT_PIN 10
+#define LED_PIN          13
+#define LED_A_PIN        11
 
-#define IMU_INT1_PIN    20
-#define IMU_INT2_PIN    21
-
-#define LED_PIN         13
-#define LED_GN_PIN      26
-#define LED_BU_PIN      29
-#define LED_YE_PIN      28
-#define LED_RE_PIN      27
-
-#define SW_GN_PIN       39
-#define SW_BU_PIN       36
-#define SW_YE_PIN       37
-#define SW_RE_PIN       38
-
-#define ACCEL_INTR_PIN  21
-#define GYRO_INTR_PIN   20                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+#define SW_A_PIN        10
 
 LSM6 lsm6;
 
@@ -74,29 +66,8 @@ int BEEP_UP[] = {750,900,END_MARKER};
 int BEEP_OFF[] = {END_MARKER};
 
 // Imu variables
-float timeDriftPitch = 0.0;  // set
-float timeDriftRoll = 0.0;   // set
-float timeDriftYaw = 0.0;    // set
-float gyroPitchRaw = 0.0;
-float gyroPitchRate = 0.0;
 float gyroPitchDelta = 0.0;
-float gPitch = 0.0;
 float gaPitch = 0.0;
-float gyroRollRaw = 0.0;
-float gyroRollRate = 0.0;
-float gRoll = 0.0;
-float gaRoll = 0.0;
-float gyroYawRaw = 0.0;
-float gyroYawRate = 0.0;
-float gYaw = 0.0;
-float gHeading = 0.0;
-float gcYaw = 0.0;
-float gcHeading = 0.0;
-float lpfCos3Accel = 0.0;
-float aPitch = 0.0;
-float lpfAPitch = 0.0;
-float yAccel = 0.0;
-float aRoll = 0.0;
 
 // Motor varialbles
 volatile long tickPositionRight = 0;
@@ -107,10 +78,6 @@ volatile long tickSumRight = 0;
 volatile long tickSumLeft = 0;
 volatile long tickCountRight = 0;
 volatile long tickCountLeft = 0;
-//volatile int intrMFpsRightSum = 0;
-//volatile int intrMFpsRightCount = 0;
-//volatile int intrMFpsLeftSum = 0;
-//volatile int intrMFpsLeftCount = 0;
 int wMFpsRight = 0;
 float wFpsRight = 0.0;
 int wMFpsLeft = 0;
@@ -121,10 +88,8 @@ float targetWFpsRight = 0.0;
 float targetWFpsLeft = 0.0;
 
 // Run variables
-float joyX = 0.0;
-float joyY = 0.0;
-float routeFpsDiff = 0.0;
-float routeFps = 0.0;
+float controllerX = 0.0;
+float controllerY = 0.0;
 float rotation3 = 0.0;
 float cos3 = 0.0;
 float lpfCos3 = 0.0;
@@ -132,36 +97,16 @@ float lpfCos3Old = 0.0;
 float coFps = 0.0;
 float targetCoFps = 0.0;
 float targetWFps = 0.0;
-unsigned long lastHcTime = 0UL;
 bool isGettingUp = false;
 unsigned long gettingUpStartTime = 0;
-bool isGettingDown = false;
-unsigned gettingDownStartTime = 0;
-struct loc {
-  double x;
-  double y;
-};
-struct loc currentLoc;
 
-//short joyX = 0;
-//short joyY = 0;
-byte stateRun = 0;
-byte stateButton1 = 0;
-float battVolt = 0.0;
-short battRaw = 0;
 unsigned long timeMilliseconds = 0UL;
 unsigned long timeMicroseconds = 0UL;
 bool isRunning = false;
 bool isRunReady = false;
 bool isUpright = false;
 bool isMotorDisable = false;
-//bool isHeld = false;
-bool isRouteInProgress = false;
-bool isHcActive = false;
-
-float sendBatt = 0.0;
-float sendFps = 0.0;
-unsigned short sendStatus = 0;
+bool isRcActive = true;  // Set this false if signal disappears.
 
 //int bCount = 0;
 unsigned long upStatTime = 0UL;
@@ -180,6 +125,16 @@ float whFpsRight = 0.0;
 float whFpsLeft = 0.0;
 float whFps = 0.0;
 
+// RC variables
+volatile unsigned long ch1pw = 0UL; 
+volatile unsigned long ch2pw = 0UL; 
+volatile unsigned long ch3pw = 0UL; 
+volatile unsigned long ch4pw = 0UL; 
+volatile unsigned long ch5pw = 0UL; 
+volatile unsigned long ch6pw = 0UL; 
+volatile unsigned long lastRcPulse = 0UL;
+boolean ch3sw = false;
+
 #define MSG_SIZE 100
 char message[MSG_SIZE] = "";
 
@@ -188,30 +143,16 @@ char message[MSG_SIZE] = "";
  ******************************************************************************/
 void setup() {
   Serial.begin(115200);
-  XBEE_SER.begin(57600);   // XBee, See bottom of this page for settings.
   // Motor pins are initialized in motorInit()
-  pinMode(BATT_PIN, INPUT);
   pinMode(LED_PIN, OUTPUT);
-  pinMode(ACCEL_INTR_PIN, INPUT);
-  pinMode(GYRO_INTR_PIN, INPUT);
-  pinMode(LED_GN_PIN, OUTPUT);
-  pinMode(LED_BU_PIN, OUTPUT);
-  pinMode(LED_YE_PIN, OUTPUT);
-  pinMode(LED_RE_PIN, OUTPUT);
-  pinMode(SW_GN_PIN, INPUT_PULLUP);
-  pinMode(SW_BU_PIN, INPUT_PULLUP);
-  pinMode(SW_YE_PIN, INPUT_PULLUP);
-  pinMode(SW_RE_PIN, INPUT_PULLUP);
+  pinMode(LED_A_PIN, OUTPUT);
+  pinMode(SW_A_PIN, INPUT_PULLUP);
     
   digitalWrite(LED_PIN, HIGH);
-  digitalWrite(LED_GN_PIN, LOW);
-  digitalWrite(LED_BU_PIN, LOW);
-  digitalWrite(LED_YE_PIN, LOW);
-  digitalWrite(LED_RE_PIN, LOW);
+  digitalWrite(LED_A_PIN, LOW);
 
   imuInit();
   motorInit();
-  Serial.send_now();
 }
 
 
@@ -220,27 +161,41 @@ void setup() {
  * loop()
  ******************************************************************************/
 void loop() {
-  run();
-//  testFps();
+  if (IS_SYSTEM_TEST)  systemTest();
+  else run();
 }
 
 
-void testFps() {
-  unsigned long trigger = 0;
-  isRunning = true;
-  isMotorDisable = false;
 
-  while(true) {
-    readXBee();
-    isRunning = isRunReady;
-    if (millis() > trigger) {
-      trigger = millis() + 200;
-//  Serial.print(wFpsLeft); Serial.print("\t");Serial.print(wFpsRight); Serial.print("\t");Serial.println(wFps);
-      int pw = abs(joyY);
-      Serial.print(isRunning); Serial.print(isMotorDisable); Serial.print(" ");
-      Serial.print(pw); Serial.print("\t"); Serial.println(joyY);
-      setMotorRight(pw, joyY > 0);
-      setMotorLeft(pw, joyY > 0);
-    }
-  }
+/*****************************************************************************-
+ * systemTest()  
+ *     The following code runs when the IS_SYSTEM_TEST variable at the top of 
+ *     this file is set to "true".  If everything is working, the speed of the
+ *     motors will be conrolled by 
+ *          a) the steering on the RC control, 
+ *          b) the accelerator on the RC control and 
+ *          c) the tilt of SixPotatoe.  
+ *      To run this test, 
+ *          a) set the IS_SYSTEM_TEST variable to true,
+ *          b) compile an load the code,
+ *          c) turn on the main power switch on SixPotatoe
+ *          d) press the run on SixPotatoe
+ *****************************************************************************/
+void systemTest() {
+//  unsigned long trigger = 0;
+//  isRunning = true;
+//  isMotorDisable = false;
+//
+//  while(true) {
+//    isRunning = isRunReady;
+//    if (millis() > trigger) {
+//      trigger = millis() + 200;
+////  Serial.print(wFpsLeft); Serial.print("\t");Serial.print(wFpsRight); Serial.print("\t");Serial.println(wFps);
+//      int pw = abs(joyY);
+//      Serial.print(isRunning); Serial.print(isMotorDisable); Serial.print(" ");
+//      Serial.print(pw); Serial.print("\t"); Serial.println(joyY);
+//      setMotorRight(pw, joyY > 0);
+//      setMotorLeft(pw, joyY > 0);
+//    }
+//  }
 }

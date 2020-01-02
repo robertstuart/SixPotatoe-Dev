@@ -1,121 +1,87 @@
 
-const int BATTERY_WARNING = 726;  // about 10% capacity (centivolts)
-const int BATTERY_CRITICAL = 666; // about 1% cap (centivolts)
+unsigned int ledOnTime = 0UL;
+unsigned int ledOffTime = 0UL;
+unsigned int ledAOnTime = 0UL;
+unsigned int ledAOffTime = 0UL;
 
-//int beepCycleCount = 0;
-//boolean beepStat = false;
-int *beepSequence = BEEP_OFF;
-int beepPtr = 0;
-boolean flip = false;
-int warningCount = 0;
-int criticalCount = 0;
-int addFlip = 0;
-boolean redLedState = false;
-boolean greenLedState = false;
-unsigned long taskMilliseconds = 0L;
-unsigned long gravityTrigger = 0L;
-//unsigned long audioTrigger = 0L;
-unsigned long errorTrigger = 0L;
-unsigned int taskPtr = 0;
-unsigned int pingTpHCCount = 0;
-unsigned long onGroundTime = 0L;
-unsigned long warningTrigger = 0;
-unsigned long batteryLastGood = 0;
-
-
-const byte* patternBlue = BLINK_OFF;
-const byte* patternYellow = BLINK_OFF;
-const byte* patternRed = BLINK_OFF;
-const byte* patternGreen = BLINK_OFF;
-int blinkPtrBlue = 0;
-int blinkPtrYellow = 0;
-int blinkPtrRed = 0;
-int blinkPtrGreen = 0;
-
-
-/******************************************************************************
+/*****************************************************************************-
  * commonTasks()
  *****************************************************************************/
 void commonTasks() {
-  readUp(); 
-  readXBee(); 
   blinkLed();
-  checkBeep();
-  battery();
   switches();
   safeAngle();
   setRunningState();
-  setLedStates();
-  setHcActive();
-  flush();
+  blinkLed();
   timeMicroseconds = micros();
   timeMilliseconds = millis();
 }
 
 
 
-/******************************************************************************
+/*****************************************************************************-
  * setRunningState()
- *
- *     Set the TP_STATE_RUNNING bit if the following are true:
- *         TP_STATE_RUN_READY is true
- *         TP_STATE_UPRIGHT is true
- *         TP_STATE_ON_GROUND or isJump is true
- *
- *      Set x and y to zero if there is no connection to
- *      a controller or STATE_MOTOR_FAULT is true.
- *
- *      Set blinking according to the above states.
- *
- **************************************************************************/
+ *****************************************************************************/
 void setRunningState() {
-  static boolean oldIsRunning = true;
+//  static boolean oldIsRunning = true;
 
-  // Set the runnng bit to control motors
+  // Set isRunning variable to control motors
   if (isRunReady && (isUpright || isGettingUp)) {
     isRunning = true;
-    if (oldIsRunning == false) {  // State change
-      oldIsRunning = true;
-    }
+//    if (oldIsRunning == false) {  // State change
+//      oldIsRunning = true;
+//    }
   } else {
     isRunning = false;
-    if (oldIsRunning == true) { // State change
-      oldIsRunning = false;
-    } 
+//    if (oldIsRunning == true) { // State change
+//      oldIsRunning = false;
+//    } 
   }
 }
 
-void setLedStates() {
-  byte *bluePattern;
-  byte *yellowPattern;
-  
-  // Set the blue upboard led
-  if (timeMilliseconds > (upStatTime + 200)) {
-    bluePattern = BLINK_OFF;  // Timed out
-    isRouteInProgress = false;
-  } else {
-    bluePattern = (isRouteInProgress) ? BLINK_ON : BLINK_SB;
-  }
 
-  // set yellow (state)
-  if (isRouteInProgress){
-    yellowPattern = (isRunning) ? BLINK_ON : BLINK_FF;
-  } else if (isRunReady && isRunning) {
-    yellowPattern = BLINK_ON;
-  } else if (isRunReady && !isRunning) {
-    yellowPattern = BLINK_FF;
-  } else {
-    yellowPattern = BLINK_SB;
+
+/*****************************************************************************-
+ * setBlink()  Set the blink pattern for an LED
+ *****************************************************************************/
+void setBlink(int pin, int onTime, int offTime) {
+  if (pin == LED_PIN) {
+    ledOnTime = onTime;
+    ledOffTime = offTime;
   }
-      
-  setBlink(LED_BU_PIN, bluePattern);
-  setBlink(LED_YE_PIN, yellowPattern);
-  setBlink(LED_GN_PIN, yellowPattern);
+  if (pin == LED_A_PIN) {
+    ledAOnTime = onTime;
+    ledAOffTime = offTime;
+  }
 }
 
 
-/******************************************************************************
+
+/*****************************************************************************-
+ * blinkLed()
+ *****************************************************************************/
+void blinkLed() {
+  static bool isLedOn = false;
+  static unsigned long ledTrigger = 0;
+  if (timeMilliseconds > ledTrigger) {
+    digitalWrite(LED_PIN, isLedOn ? LOW : HIGH);
+    ledTrigger = timeMilliseconds + (isLedOn ? ledOffTime : ledOnTime);
+    isLedOn = !isLedOn;
+  }
+  static bool isLedAOn = false;
+  static unsigned long ledATrigger = 0;
+  if (timeMilliseconds > ledATrigger) {
+    digitalWrite(LED_A_PIN, isLedAOn ? LOW : HIGH);
+    ledATrigger = timeMilliseconds + (isLedAOn ? ledAOffTime : ledAOnTime);
+    isLedAOn = !isLedAOn;
+  }
+}
+
+
+
+/*****************************************************************************-
  * safeAngle() Check to see if we have fallen sidways or forwards.
+ *    TODO make this dependent on speed
  *****************************************************************************/
 void safeAngle() {
   static unsigned long tTime = 0UL; // time of last state change
@@ -136,243 +102,111 @@ void safeAngle() {
 
 
 
-/******************************************************************************
- * battery()
- *****************************************************************************/
-void battery() {
-  static unsigned long batteryTrigger = 0L;
-  if (timeMilliseconds > batteryTrigger) {
-    batteryTrigger = timeMilliseconds + 1000;  // 1 per second
-    battVolt = ((float) analogRead(BATT_PIN)) * .01592;
-//    Serial.print(analogRead(BATT_PIN)); Serial.print(" "); Serial.println(battVolt);
-  }
-}
-
-
-
-/******************************************************************************
- * gyroTemperature() Not used. Doesn't improve drift over small 
- *                   temperature ranges.
- ******************************************************************************/
-//void gyroTemperature() {
-//  static unsigned long gyroTemperatureTrigger = 0UL;
-//  if (timeMilliseconds > gyroTemperatureTrigger) {
-//    gyroTemperatureTrigger = timeMilliseconds + 1000;  // 1 per second
-//    float f = readFahr();
-//    temperatureDriftYaw = (f - baseGyroTemp) * 0.172;
-//  }
-//}
-
-
-
-/******************************************************************************
- *  blink() 
- ******************************************************************************/
-void blinkLed() {
-  static unsigned long blinkTrigger = 0L;
-  if (timeMilliseconds > blinkTrigger) {
-    blinkTrigger = timeMilliseconds + 100;  // 10 per second
-
-    // Blink the Blue
-    int b = (patternBlue[blinkPtrBlue++] == 1) ? HIGH : LOW;
-    if (patternBlue[blinkPtrBlue] == END_MARKER) blinkPtrBlue = 0;
-    digitalWrite(LED_BU_PIN, b);
-
-    // Blink the Green
-    b = (patternGreen[blinkPtrGreen++] == 1) ? HIGH : LOW;
-    if (patternGreen[blinkPtrGreen] == END_MARKER) blinkPtrGreen = 0;
-    digitalWrite(LED_GN_PIN, b);
-
-    // Blink the Yellow
-    b = (patternYellow[blinkPtrYellow++] == 1) ? HIGH : LOW;
-    if (patternYellow[blinkPtrYellow] == END_MARKER) blinkPtrYellow = 0;
-    digitalWrite(LED_YE_PIN, b);
-
-    // Blink route number on red
-//    if (++routeOffCount >=5) {
-//      routeOffCount = 0;
-//      if (routeCycle <= routeTablePtr) {
-//        digitalWrite(LED_RE_PIN, HIGH);
-//      }
-//      routeCycle++;
-//      if (routeCycle >= (routeTablePtr + 3)) {
-//        routeCycle = 0;
-//      }
-//    } else if (routeOffCount == 2) {
-//      digitalWrite(LED_RE_PIN, LOW);
-//    }
-  }  
-}
-
-
-
-/******************************************************************************
- *  setBlink() Set blink patter for led
- ******************************************************************************/
-void setBlink(int led, byte* pattern) {
-  switch (led) {
-    case LED_BU_PIN:  // Also blinks the green
-      if (patternBlue != pattern) {
-        patternBlue = pattern;
-        blinkPtrBlue = 0;
-        blinkPtrYellow = 0;
-        blinkPtrRed = 0;
-        blinkPtrGreen = 0;
-      }
-      break;
-    case LED_YE_PIN:
-      if (patternYellow != pattern) {
-        patternYellow = pattern;
-        blinkPtrBlue = 0;
-        blinkPtrYellow = 0;
-        blinkPtrRed = 0;
-        blinkPtrGreen = 0;
-     }
-      break;
-    case LED_RE_PIN:
-      if (patternRed != pattern) {
-        patternRed = pattern;
-        blinkPtrBlue = 0;
-        blinkPtrYellow = 0;
-        blinkPtrRed = 0;
-        blinkPtrGreen = 0;
-      }
-      break;
-    case LED_GN_PIN:
-      if (patternGreen != pattern) {
-        patternGreen = pattern;
-        blinkPtrBlue = 0;
-        blinkPtrYellow = 0;
-        blinkPtrRed = 0;
-        blinkPtrGreen = 0;
-      }
-      break;
-    default:
-      break;
-  }
-}
-
-
-
-void beep(int seq[]) {
-  beepPtr = 0;
-  beepSequence = seq;
-}
-
-void checkBeep() {
-  static unsigned long beepTrigger = 0;
-  if (timeMilliseconds > beepTrigger) {
-    beepTrigger = timeMilliseconds + 500;
-    int beepVal = beepSequence[beepPtr];
-    if (beepVal == END_MARKER) {
-      noTone(SPEAKER_PIN);
-    } else {
-      beepVal = beepSequence[beepPtr++];
-      tone(SPEAKER_PIN, beepVal);
-    }
-  }
-}
-
-
-
-/******************************************************************************
+/*****************************************************************************-
  * switches()
- *      Toggle TP_STATE_RUN_READY on yellow switch.  1 sec dead period.
+ *      Check switches and debounce
  ******************************************************************************/
 void switches() {
-  static unsigned int buTimer = 0;
-  static boolean buState = false;
-  static boolean oldBuState = false;
+  static unsigned int timerA = 0;
+  static boolean aState = false;
+  static boolean oldAState = false;
+    
+  // Debounce A switch
+  boolean a = digitalRead(SW_A_PIN) == LOW;
+  if (a) timerA = timeMilliseconds;
+  if ((timeMilliseconds - timerA) > 50) aState = false;
+  else aState = true;
 
-  static unsigned int yeTimer = 0;
-  static boolean yeState = false;
-  static boolean oldYeState = false;
-  
-  static unsigned int reTimer = 0;
-  static boolean reState = false;
-  static boolean oldReState = false;
-  
-  static unsigned int gnTimer = 0;
-  static boolean gnState = false;
-  static boolean oldGnState = false;
-  
-  // Debounce Blue
-  boolean bu = digitalRead(SW_BU_PIN) == LOW;
-  if (bu) buTimer = timeMilliseconds;
-  if ((timeMilliseconds - buTimer) > 50) buState = false;
-  else buState = true;
-  
-  // Debounce Yellow
-  boolean ye = digitalRead(SW_YE_PIN) == LOW;
-  if (ye) yeTimer = timeMilliseconds;
-  if ((timeMilliseconds - yeTimer) > 50) yeState = false;
-  else yeState = true;
-
-  // Debounce Red
-  boolean re = digitalRead(SW_RE_PIN) == LOW;
-  if (re) reTimer = timeMilliseconds;
-  if ((timeMilliseconds - reTimer) > 50) reState = false;
-  else reState = true;
-
-  // Debounce Green (back switch)
-  boolean gn = digitalRead(SW_GN_PIN) == LOW;
-  if (gn) gnTimer = timeMilliseconds;
-  if ((timeMilliseconds - gnTimer) > 50) gnState = false;
-  else gnState = true;
-
-  // Blue press transition. Toggle route enable.
-  if (buState && (!oldBuState)) {
-//    sendUMsg(TOUP_RT_ENABLE, 0); // toggle
-  }
-
-  // Green press transition.  Start route.
-  if (gnState && (!oldGnState)) {
-//    sendUMsg(TOUP_RT_START, 0);
-  }
-
-  // Yellow press transition
-  if (yeState && (!oldYeState)) {
-//    if (isRouteInProgress)  sendUMsg(TOUP_RT_START, 0);
-//    else isRunReady = !isRunReady;
+  // Switch A press transition
+  if (aState && (!oldAState)) {
     isRunReady = !isRunReady;
   }
-
-  // Red press transition
-  if (reState && (!oldReState)) {
-//    sendUMsg(TOUP_RT_NUM, 1);  // Increment route number.
-  }
-
-  oldBuState = buState;
-  oldYeState = yeState;
-  oldReState = reState;
-  oldGnState = gnState; 
+  oldAState = aState;
 }
 
 
-void setHcActive() {
-  unsigned static long hcTrigger = 0UL;
-  if (timeMilliseconds > hcTrigger) {
-    hcTrigger = timeMilliseconds + 100;
-    isHcActive = (timeMilliseconds - lastHcTime) > 1000;
-  }
+
+
+
+/*****************************************************************************-
+ *  rcRadioInit() 
+ *****************************************************************************/
+void rcRadioInit() {
+  pinMode(CH1_RADIO_PIN, INPUT);
+  pinMode(CH2_RADIO_PIN, INPUT);
+  pinMode(CH3_RADIO_PIN, INPUT);
+  pinMode(CH4_RADIO_PIN, INPUT);
+  pinMode(CH5_RADIO_PIN, INPUT);
+  pinMode(CH6_RADIO_PIN, INPUT);
+  attachInterrupt(CH1_RADIO_PIN, ch1Isr, CHANGE);
+  attachInterrupt(CH2_RADIO_PIN, ch2Isr, CHANGE);
+  attachInterrupt(CH3_RADIO_PIN, ch3Isr, CHANGE);
+  attachInterrupt(CH4_RADIO_PIN, ch4Isr, CHANGE);
+  attachInterrupt(CH5_RADIO_PIN, ch5Isr, CHANGE);
+  attachInterrupt(CH6_RADIO_PIN, ch6Isr, CHANGE);
 }
 
-void flush() { // at beginning, flush serial buffer.
-  static unsigned long t = 0UL;
-  static bool hasFired = false;
-  if (hasFired) return;
-  if (t == 0UL) t = timeMilliseconds;
-  if (timeMilliseconds > (t + 2000)) {
-    Serial.println("Flushed");
-    hasFired = true;
-  }
+
+
+/*****************************************************************************-
+ *  chXIsr() Interrupt routines for radio pulses
+ *****************************************************************************/
+void ch1Isr() {
+  static unsigned long riseTime = 0UL;
+  unsigned int t = micros();
+  if (digitalReadFast(CH1_RADIO_PIN)) riseTime = t;
+  else ch1pw = t - riseTime; 
+}
+void ch2Isr() {
+  static unsigned long riseTime = 0UL;
+  unsigned int t = micros();
+  if (digitalReadFast(CH2_RADIO_PIN)) riseTime = t;
+  else ch2pw = t - riseTime; 
+}
+void ch3Isr() {
+  static unsigned long riseTime = 0UL;
+  unsigned int t = micros();
+  if (digitalReadFast(CH3_RADIO_PIN)) riseTime = t;
+  else ch3pw = t - riseTime; 
+}
+void ch4Isr() {
+  static unsigned long riseTime = 0UL;
+  unsigned int t = micros();
+  if (digitalReadFast(CH2_RADIO_PIN)) riseTime = t;
+  else ch4pw = t - riseTime; 
+  lastRcPulse = t;
+}
+void ch5Isr() {
+  static unsigned long riseTime = 0UL;
+  unsigned int t = micros();
+  if (digitalReadFast(CH5_RADIO_PIN)) riseTime = t;
+  else ch5pw = t - riseTime; 
+}
+void ch6Isr() {
+  static unsigned long riseTime = 0UL;
+  unsigned int t = micros();
+  if (digitalReadFast(CH6_RADIO_PIN)) riseTime = t;
+  else ch6pw = t - riseTime; 
 }
 
-/******************************************************************************
- *  rangeAngle() Set angle value between -180 and +180
- ******************************************************************************/
-double rangeAngle(double angle) {
-  while (angle > 180.0) angle -= 360.0;
-  while (angle <= -180.0) angle += 360.0;
-  return angle;
+
+
+/*****************************************************************************-
+ *  readRcRadio() 
+ *****************************************************************************/
+void readRcRadio() {
+  float p;
+  if (timeMicroseconds > (lastRcPulse + 500000)) { // 1/2 sec without something from RC?
+    controllerX = 0.0;
+    controllerY = 0.0;
+    ch3sw = false;
+  } else {
+    p = ((float) (ch2pw - 1500));
+    controllerY = p / 326.0;
+    p = ((float) (ch4pw - 1500));
+    controllerX = p / 376.0;
+    ch3sw = ch3pw < 1100;
+    controllerY = constrain(controllerY, -1.0, 1.0);
+    controllerX = constrain(controllerX, -1.0, 1.0);
+  }
 }
