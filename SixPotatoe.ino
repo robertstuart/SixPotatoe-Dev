@@ -2,10 +2,10 @@
 const bool IS_SYSTEM_TEST = false;  // Set to be true to test the system.
 
 #include <Wire.h>
-#include <LSM6.h>
+#include <SparkFunMPU9250-DMP.h>
 
 
-const float GYRO_SENS = 0.0696;      // Multiplier to get degrees. 
+//const float GYRO_SENS = 0.0696;      // Multiplier to get degrees. 
 const float GYRO_WEIGHT = 0.997;
 const float WHEEL_DIA_INCH = 4.834;
 const float WHEEL_CIRC = M_PI * (WHEEL_DIA_INCH / 12.0);
@@ -39,8 +39,6 @@ const float MAX_FPS = 10.0;
 
 #define SW_A_PIN        10
 
-LSM6 lsm6;
-
 // Constants to be set
 float CONST_COS_ROTATION = 4.5;
 float CONST_COS_LPF = 0.98;
@@ -68,6 +66,9 @@ int BEEP_OFF[] = {END_MARKER};
 // Imu variables
 float gyroPitchDelta = 0.0;
 float gaPitch = 0.0;
+float gaRoll = 0.0;
+float gYaw = 0.0;
+float maPitch = 0.0;
 
 // Motor varialbles
 volatile long tickPositionRight = 0;

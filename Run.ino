@@ -19,7 +19,7 @@ float speedAdjustment = 0.0;
  *****************************************************************************/
 void run() {
   delay(200); // For switches?
-  setBlink(LED_PIN, 50, 500);
+  setBlink(LED_PIN, 150, 150);
   while(true) { // main loop
     commonTasks();
     // Add code to timeout in imu read!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
