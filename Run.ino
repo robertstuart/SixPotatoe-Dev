@@ -18,12 +18,25 @@ float speedAdjustment = 0.0;
  *  run() Continuous loop for doing all tasks.
  *****************************************************************************/
 void run() {
+
+
+//  OpenLog myLog; //Create instance
+//  myLog.begin(); //Open connection to OpenLog (no pun intended)
+//  for (float i = 0.0; i < 9.1; i += 1.0) {
+//    sprintf(message, "%.2f,%.2f,%.2f,%.2f,%.2f", i, sqrt(i), pow(i,1.01), i * .34, i);
+//    Serial.println(message);
+//    myLog.println(message);
+//  }
+//  myLog.syncFile();
+//
+
   delay(200); // For switches?
+
   setBlink(LED_PIN, 150, 150);
   while(true) { // main loop
     commonTasks();
     // Add code to timeout in imu read!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if (isNewImuData()) {
+    if (isNewImuData()) { 
       if (isGettingUp) gettingUp();
       else balance(); 
       checkMotors();

@@ -129,9 +129,9 @@ void switches() {
 
 
 /*****************************************************************************-
- *  rcRadioInit() 
+ *  rcInit() 
  *****************************************************************************/
-void rcRadioInit() {
+void rcInit() {
   pinMode(CH1_RADIO_PIN, INPUT);
   pinMode(CH2_RADIO_PIN, INPUT);
   pinMode(CH3_RADIO_PIN, INPUT);
@@ -151,62 +151,64 @@ void rcRadioInit() {
 /*****************************************************************************-
  *  chXIsr() Interrupt routines for radio pulses
  *****************************************************************************/
+const int RC_MAX = 2150;
+const int RC_MIN = 872;
+const int RC_RANGE = RC_MAX - RC_MIN;
+const int RC_MID = (RC_RANGE / 2) + RC_MIN ;
 void ch1Isr() {
   static unsigned long riseTime = 0UL;
-  unsigned int t = micros();
+  unsigned long t = micros();
   if (digitalReadFast(CH1_RADIO_PIN)) riseTime = t;
-  else ch1pw = t - riseTime; 
+  else {
+    ch1pw = t - riseTime; 
+    controllerX = ( 2.0 * ((float) (ch1pw - RC_MID))) / RC_RANGE;
+  }
 }
 void ch2Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
   if (digitalReadFast(CH2_RADIO_PIN)) riseTime = t;
-  else ch2pw = t - riseTime; 
+  else  {
+    ch2pw = t - riseTime; 
+    controllerY = ( 2.0 * ((float) (ch2pw - RC_MID))) / RC_RANGE;
+  }
 }
 void ch3Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
   if (digitalReadFast(CH3_RADIO_PIN)) riseTime = t;
-  else ch3pw = t - riseTime; 
+  else {
+    ch3pw = t - riseTime; 
+    ch3State = (ch3pw < 1500) ? false : true;
+  }
 }
 void ch4Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
-  if (digitalReadFast(CH2_RADIO_PIN)) riseTime = t;
-  else ch4pw = t - riseTime; 
-  lastRcPulse = t;
+  if (digitalReadFast(CH4_RADIO_PIN)) riseTime = t;
+  else {
+//    Serial.println(ch4pw);
+    ch4pw = t - riseTime; 
+    if (ch4pw < 1200) ch4State = 0;
+    else if (ch4pw < 1800) ch4State = 1;
+    else ch4State = 2;
+  }
 }
 void ch5Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
   if (digitalReadFast(CH5_RADIO_PIN)) riseTime = t;
-  else ch5pw = t - riseTime; 
+  else {
+    ch5pw = t - riseTime; 
+    ch5Val = ( 2.0 * ((float) (ch5pw - RC_MID))) / RC_RANGE;
+  }
 }
 void ch6Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
   if (digitalReadFast(CH6_RADIO_PIN)) riseTime = t;
-  else ch6pw = t - riseTime; 
-}
-
-
-
-/*****************************************************************************-
- *  readRcRadio() 
- *****************************************************************************/
-void readRcRadio() {
-  float p;
-  if (timeMicroseconds > (lastRcPulse + 500000)) { // 1/2 sec without something from RC?
-    controllerX = 0.0;
-    controllerY = 0.0;
-    ch3sw = false;
-  } else {
-    p = ((float) (ch2pw - 1500));
-    controllerY = p / 326.0;
-    p = ((float) (ch4pw - 1500));
-    controllerX = p / 376.0;
-    ch3sw = ch3pw < 1100;
-    controllerY = constrain(controllerY, -1.0, 1.0);
-    controllerX = constrain(controllerX, -1.0, 1.0);
+  else {
+    ch6pw = t - riseTime; 
+    ch6Val = ( 2.0 * ((float) (ch6pw - RC_MID))) / RC_RANGE;
   }
 }

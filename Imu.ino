@@ -6,8 +6,6 @@
 const float GYRO_SENS = 0.06097;      // Multiplier to get degrees.
 const float ACCEL_SENSE = 1.0 / 4098.0;       // Multiplier to get force in g's.
 
-//LSM6 lsm6;
-//MPU9250 imu(MPU9250_ADDRESS, Wire, 400000);
 MPU9250_DMP imu;
 
 float accelX = 0.0;
@@ -62,15 +60,15 @@ void imuInit() {
 
 
 /*****************************************************************************-
-    isNewImu()   Returns true if the IMU has new data.
+    isNewImuData()   Returns true if the IMU has new data.
                 Reads the IMU and sets the new values.
  *****************************************************************************/
 boolean isNewImuData() {
-  static int oldT = 0;
+  static unsigned long oldT = 0;
 
   if (imu.dataReady()) {
     imu.update(UPDATE_ACCEL | UPDATE_GYRO);
-
+ 
     accelX = ((float) imu.ax) * ACCEL_SENSE;
     accelY = ((float) imu.ay) * ACCEL_SENSE;
     accelZ = ((float) imu.az) * ACCEL_SENSE;
@@ -97,8 +95,10 @@ boolean isNewImuData() {
     maRoll  *= RAD_TO_DEG;
     maYaw   *= RAD_TO_DEG;
 
-    sprintf(message, "%7.2f %7.2f %7.2f %7.2f %7.2f %7.2f", maPitch, maRoll, maYaw, gaPitch, gaRoll, gYaw);
-    Serial.println(message);
+    unsigned long newT = timeMilliseconds;
+//    sprintf(message, "%7.2f %7.2f %7.2f %7.2f %7.2f %7.2f %3d", maPitch, maRoll, maYaw, gaPitch, gaRoll, gYaw, newT - oldT);
+//    Serial.println(message);
+    oldT = newT;
 
     return true;
   } else {

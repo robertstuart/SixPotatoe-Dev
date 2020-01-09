@@ -1,9 +1,10 @@
 
-const bool IS_SYSTEM_TEST = false;  // Set to be true to test the system.
+const bool IS_TEST1 = false;  // Set to be true for the 1st system test.
+const bool IS_TEST2 = true;  // Set to be true for the 2nd system test.
 
 #include <Wire.h>
 #include <SparkFunMPU9250-DMP.h>
-
+#include "SparkFun_Qwiic_OpenLog_Arduino_Library.h"
 
 //const float GYRO_SENS = 0.0696;      // Multiplier to get degrees. 
 const float GYRO_WEIGHT = 0.997;
@@ -89,8 +90,6 @@ float targetWFpsRight = 0.0;
 float targetWFpsLeft = 0.0;
 
 // Run variables
-float controllerX = 0.0;
-float controllerY = 0.0;
 float rotation3 = 0.0;
 float cos3 = 0.0;
 float lpfCos3 = 0.0;
@@ -127,14 +126,18 @@ float whFpsLeft = 0.0;
 float whFps = 0.0;
 
 // RC variables
-volatile unsigned long ch1pw = 0UL; 
-volatile unsigned long ch2pw = 0UL; 
-volatile unsigned long ch3pw = 0UL; 
-volatile unsigned long ch4pw = 0UL; 
-volatile unsigned long ch5pw = 0UL; 
-volatile unsigned long ch6pw = 0UL; 
-volatile unsigned long lastRcPulse = 0UL;
-boolean ch3sw = false;
+volatile int ch1pw = 0; 
+volatile int ch2pw = 0; 
+volatile int ch3pw = 0; 
+volatile int ch4pw = 0; 
+volatile int ch5pw = 0; 
+volatile int ch6pw = 0; 
+volatile float controllerX = 0.0; // ch1
+volatile float controllerY = 0.0; // ch2
+volatile boolean ch3State = false;
+volatile int ch4State = 0;
+volatile float ch5Val = 0.0;
+volatile float ch6Val = 0.0;
 
 #define MSG_SIZE 100
 char message[MSG_SIZE] = "";
@@ -144,16 +147,39 @@ char message[MSG_SIZE] = "";
  ******************************************************************************/
 void setup() {
   Serial.begin(115200);
+  Wire.begin();
+//  Wire.setClock(400000);
   // Motor pins are initialized in motorInit()
   pinMode(LED_PIN, OUTPUT);
-  pinMode(LED_A_PIN, OUTPUT);
-  pinMode(SW_A_PIN, INPUT_PULLUP);
     
   digitalWrite(LED_PIN, HIGH);
   digitalWrite(LED_A_PIN, LOW);
 
+  rcInit(); 
   imuInit();
   motorInit();
+
+  
+////  delay(10);
+//  OpenLog myLog; //Create instance
+////  delay(10);
+//  myLog.begin(); //Open connection to OpenLog (no pun intended)
+////  delay(10);
+//  Serial.println(myLog.getVersion());
+//  Serial.println("OpenLog Write File Test2");
+//  myLog.println("This2 goes to the log file2");
+////  delay(10);
+//  Serial.println("This goes to the terminal2");
+//  float batteryVoltage = 3.4;
+//  myLog.println("Batt voltage2: " + String(batteryVoltage));
+////  delay(10);
+//  batteryVoltage = batteryVoltage + 0.71;
+//  myLog.println("Batt voltage2: " + String(batteryVoltage));
+////  delay(10);
+//  myLog.syncFile();
+//  Serial.println(F("Done2!"));
+
+
 }
 
 
@@ -162,41 +188,39 @@ void setup() {
  * loop()
  ******************************************************************************/
 void loop() {
-  if (IS_SYSTEM_TEST)  systemTest();
+  if (IS_TEST1) systemTest1();
+  else if (IS_TEST2)  systemTest2();
   else run();
+
 }
 
 
 
 /*****************************************************************************-
- * systemTest()  
- *     The following code runs when the IS_SYSTEM_TEST variable at the top of 
- *     this file is set to "true".  If everything is working, the speed of the
- *     motors will be conrolled by 
- *          a) the steering on the RC control, 
- *          b) the accelerator on the RC control and 
- *          c) the tilt of SixPotatoe.  
- *      To run this test, 
- *          a) set the IS_SYSTEM_TEST variable to true,
- *          b) compile an load the code,
- *          c) turn on the main power switch on SixPotatoe
- *          d) press the run on SixPotatoe
+ * systemTest?()  
+ *           TODO Explain test
  *****************************************************************************/
-void systemTest() {
-//  unsigned long trigger = 0;
-//  isRunning = true;
-//  isMotorDisable = false;
-//
-//  while(true) {
-//    isRunning = isRunReady;
-//    if (millis() > trigger) {
-//      trigger = millis() + 200;
-////  Serial.print(wFpsLeft); Serial.print("\t");Serial.print(wFpsRight); Serial.print("\t");Serial.println(wFps);
-//      int pw = abs(joyY);
-//      Serial.print(isRunning); Serial.print(isMotorDisable); Serial.print(" ");
-//      Serial.print(pw); Serial.print("\t"); Serial.println(joyY);
-//      setMotorRight(pw, joyY > 0);
-//      setMotorLeft(pw, joyY > 0);
-//    }
-//  }
+void systemTest1() {
+  static unsigned long lastT = 0;
+  static boolean toggle = false;
+  static int m = 0;
+  if (isNewImuData()) {
+    unsigned long newT = millis();
+    sprintf(message, "%2d ms   %7.2f degrees", newT - lastT, maPitch);
+    Serial.println(message);
+    lastT = newT;
+    if ((m++ % 10) == 0) digitalWrite(LED_PIN, (toggle = !toggle) ? HIGH : LOW);
+  }
+}
+
+void systemTest2() {
+  static boolean toggle = false;
+  static int m = 0;
+  if (isNewImuData()) {
+    if ((m++ % 10) == 0) { 
+      digitalWrite(LED_PIN, (toggle = !toggle) ? HIGH : LOW);
+      sprintf(message, "%5.2f %5.2f %5d %5d %5.2f %5.2f", controllerX, controllerY, ch3State, ch4State, ch5Val, ch6Val);
+      Serial.println(message);
+    }
+  }
 }
