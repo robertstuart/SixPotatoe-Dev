@@ -1,7 +1,6 @@
 /*****************************************************************************-
  *                                   IMU.ino
  *****************************************************************************/
-//#define MPU9250_ADDRESS   MPU9250_ADDRESS_AD0 // 0x68
 #define sampleFreq  200.0f      // sample frequency in Hz
 const float GYRO_SENS = 0.06097;      // Multiplier to get degrees.
 const float ACCEL_SENSE = 1.0 / 4098.0;       // Multiplier to get force in g's.

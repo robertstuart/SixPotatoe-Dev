@@ -6,9 +6,9 @@ double accelFps = 0.0;
 double coAccelFps = 0.0;
 double lpfAccelFps = 0.0;
 double lpfTpFps = 0.0;
-float fpsCorrection = 0.0f;
-float fpsLpfCorrectionOld = 0.0;
-float fpsLpfCorrection = 0.0;
+float kphCorrection = 0.0f;
+float kphLpfCorrectionOld = 0.0;
+float kphLpfCorrection = 0.0;
 float angleError = 0.0;
 float targetAngle = 0.0;
 float speedAdjustment = 0.0;
@@ -53,33 +53,33 @@ void balance() {
   // Compute Center of Oscillation speed (cos)
   rotation3 = -gyroPitchDelta * CONST_COS_ROTATION;  // 4.5
 rotation3 = 0.0;
-  cos3 = wFps + rotation3;
+  cos3 = wKph + rotation3;
   // 0.92 .u value: 0.0 = no hf filtering, large values give slow response
-  coFps = (lpfCos3Old * CONST_COS_LPF) + (cos3 * (1.0D - CONST_COS_LPF));
-  lpfCos3Old = coFps;
+  coKph = (lpfCos3Old * CONST_COS_LPF) + (cos3 * (1.0D - CONST_COS_LPF));
+  lpfCos3Old = coKph;
 
   // Get the controller target speed.
-  targetCoFps = controllerY * MAX_FPS * 0.01;
+  targetCoKph = controllerY * MAX_KPH;
 
   // Find the speed error.  Constrain rate of change.
-  float coFpsError = targetCoFps - coFps;
+  float coKphError = targetCoKph - coKph;
 
   // compute a weighted angle to eventually correct the speed error
-  targetAngle = -(coFpsError * CONST_ERROR_TO_ANGLE); //** 4.0 ******** Speed error to angle *******************
+  targetAngle = -(coKphError * CONST_ERROR_TO_ANGLE); //** 4.0 ******** Speed error to angle *******************
   
   // Compute maximum angles for the current wheel speed and enforce limits.
   targetAngle = constrain(targetAngle, -50.0, 50.0);
 
   // Compute angle error and weight factor
   angleError = targetAngle - gaPitch;
-  fpsCorrection = angleError * CONST_ANGLE_TO_FPS; // 0.4 ******************* Angle error to speed *******************
+  kphCorrection = angleError * CONST_ANGLE_TO_KPH; // 0.4 ******************* Angle error to speed *******************
 
   // Add the angle error to the base speed to get the target wheel speed.
-  targetWFps = fpsCorrection + coFps;
+  targetWKph = kphCorrection + coKph;
 
   speedAdjustment = (((100.0 - abs(controllerY)) * 0.015) + 0.5) * ((float) controllerX * 0.01); 
-  targetWFpsRight = targetWFps - speedAdjustment;
-  targetWFpsLeft = targetWFps + speedAdjustment;
+  targetWKphRight = targetWKph - speedAdjustment;
+  targetWKphLeft = targetWKph + speedAdjustment;
 
 } // end balance() 
 
@@ -123,7 +123,7 @@ void gettingUp() {
     else tFps = ab * 0.1;
   }
   if (isBack) tFps = -tFps;
-  targetWFpsRight = targetWFpsLeft = tFps;
+  targetWKphRight = targetWKphLeft = tFps;
 }
 
 

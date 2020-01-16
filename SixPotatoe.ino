@@ -11,20 +11,18 @@ const bool IS_TEST2 = false;  // Set to be true for the 2nd system test.
 const bool IS_TEST3 = true;  // Set to be true for the 3nd system test.
 
 // System constants
-//const float GYRO_SENS = 0.0696;      // Multiplier to get degrees. 
 const float GYRO_WEIGHT = 0.997;
-const float WHEEL_DIA_INCH = 4.834;
 const float WHEEL_DIA_MM = 125.0;
-const float WHEEL_CIRC = M_PI * (WHEEL_DIA_INCH / 12.0);
-const float WHEEL_CIRC_MM = M_PI * (WHEEL_DIA_MM / 12.0);
-const float TICKS_PER_ROTATION = 329.54;
-const float TICKS_PER_FOOT = TICKS_PER_ROTATION / WHEEL_CIRC;
-const float TICKS_PER_METER = TICKS_PER_ROTATION / WHEEL_CIRC_MM;
-const float ENC_FACTOR = 1000000.0 / TICKS_PER_FOOT;
-const long ENC_FACTOR_M = (long) (ENC_FACTOR * 1000.0f);
-const float FPS_TO_PW = 17.5;
+const float TICKS_PER_ROTATION = 329.5;
+const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
+//const float WHEEL_CIRC_MM = M_PI * WHEEL_DIA_MM;          // Wheel circumference mm
+//const float WHEEL_CIRC_KM = WHEEL_CIRC_K / 1000000.0;      // Wheel curcumference kilometer
+//const float TICKS_PER_KM = TICKS_PER_ROTATION / WHEEL_CIRC_KM;
+//const float ENC_FACTOR = 1.0 / TICKS_PER_METER;
+//const float ENC_FACTOR_MICRO = ENC_FACTOR * 1000000.0;
+const float KPH_TO_PW = 17.5;
 const float DEAD_ZONE = 0.0;
-const float MAX_FPS = 10.0;
+const float MAX_KPH = 10.0;  // Maximum target for controller
 
 /*****************************************************************************-
  *  Pin definitions
@@ -58,7 +56,7 @@ float valSetV = 2.7;
 float CONST_ACCEL_LPF = 0.95;  
 //float CONST_ACCEL_PITCH = x.x;   // Cancel out acceleration from gPitch
 float CONST_ERROR_TO_ANGLE = 2.0;
-float CONST_ANGLE_TO_FPS = 0.2;
+float CONST_ANGLE_TO_KPH = 0.2;
 float ACCEL_PITCH_OFFSET = 1.4;   // pitch offset
 float MOTOR_GAIN = 3.0;
 
@@ -88,23 +86,20 @@ volatile long tickSumRight = 0;
 volatile long tickSumLeft = 0;
 volatile long tickCountRight = 0;
 volatile long tickCountLeft = 0;
-int wMFpsRight = 0;
-float wFpsRight = 0.0;
-int wMFpsLeft = 0;
-float wFpsLeft = 0.0;
-int wMFps = 0;
-float wFps = 0.0;
-float targetWFpsRight = 0.0;
-float targetWFpsLeft = 0.0;
+float wKphRight = 0.0;
+float wKphLeft = 0.0;
+float wKph = 0.0;
+float targetWKphRight = 0.0;
+float targetWKphLeft = 0.0;
 
 // Run variables
 float rotation3 = 0.0;
 float cos3 = 0.0;
 float lpfCos3 = 0.0;
 float lpfCos3Old = 0.0;
-float coFps = 0.0;
-float targetCoFps = 0.0;
-float targetWFps = 0.0;
+float coKph = 0.0;
+float targetCoKph = 0.0;
+float targetWKph = 0.0;
 bool isGettingUp = false;
 unsigned long gettingUpStartTime = 0;
 
@@ -123,14 +118,6 @@ double coTickPosition = 0.0;
 
 
 volatile int writeCount = 0;
-
-float targetWhFpsRight = 0.0;
-float targetWhFpsLeft = 0.0;
-long whMFpsRight = 0;
-long whMFpsLeft = 0;
-float whFpsRight = 0.0;
-float whFpsLeft = 0.0;
-float whFps = 0.0;
 
 // RC variables
 volatile float controllerX = 0.0;   // ch1 steering
@@ -239,15 +226,15 @@ void systemTest3() {
     commonTasks();
     if (isNewImuData()) {
       int x = (int) (controllerX * 20.0);
-      int y = (int) (controllerY * 255.0);
+      int y = (int) (controllerY * 50.0);
       int r = y + x;
       int l = y - x;
       setMotorRight(abs(r), r > 0);
       setMotorLeft(abs(l), l > 0);
       readSpeedRight();
       readSpeedLeft();
-//      sprintf(message, "%7.2f %7.2f %5d %5d %5d %5d %5d", wFpsRight, wFpsLeft, x, y, r, l, isRunning);
-//      Serial.println(message);
+      sprintf(message, "%7.2f %7.2f %5d %5d %5d", wKphRight, wKphLeft, r, l, isRunning);
+      Serial.println(message);
     }
   }
 }

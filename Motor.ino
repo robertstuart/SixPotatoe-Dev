@@ -98,7 +98,7 @@ void encoderIsrLeft() {
 
 
 /******************************************************************************
-   readSpeed????()  Called every loop from CheckMotor???
+   readSpeed????()  Called every loop from CheckMotor()
  *****************************************************************************/
 void readSpeedRight() {
   noInterrupts();
@@ -108,17 +108,16 @@ void readSpeedRight() {
   tickCountRight = 0;
   interrupts();
   if (count == 0) {
-    int newMFps = ENC_FACTOR_M / (micros() - tickTimeRight);
-    if (wMFpsRight < 0) newMFps = -newMFps;
-    if (newMFps > 0) {
-      if (newMFps < wMFpsRight) wMFpsRight = newMFps; // Set new if lower
+    float newWKph = USEC_TO_KPH / ((float) (micros() - tickTimeRight));
+    if (wKphRight < 0.0) newWKph = -newWKph;
+    if (newWKph > 0.0) {
+      if (newWKph < wKphRight) wKphRight = newWKph; // Set new if lower
     } else {
-      if (newMFps > wMFpsRight) wMFpsRight = newMFps; // Set new if lower
+      if (newWKph > wKphRight) wKphRight = newWKph; // Set new if lower
     }
   } else {
-    wMFpsRight = (ENC_FACTOR_M * count) / sum;
+    wKphRight =  (USEC_TO_KPH * ((float) count)) / ((float) sum) ;
   }
-  wFpsRight = (wMFpsRight) / 1000.0;
 }
 
 void readSpeedLeft() {
@@ -129,20 +128,20 @@ void readSpeedLeft() {
   tickCountLeft = 0;
   interrupts();
   if (count == 0) {
-    int newMFps = ENC_FACTOR_M / (micros() - tickTimeLeft);
-    if (wMFpsLeft < 0) newMFps = -newMFps;
-    if (newMFps > 0) {
-      if (newMFps < wMFpsLeft) wMFpsLeft = newMFps; // Set new if lower
+    float newWKph = USEC_TO_KPH / ((float) (micros() - tickTimeLeft));
+    if (wKphLeft < 0.0) newWKph = -newWKph;
+    if (newWKph > 0.0) {
+      if (newWKph < wKphLeft) wKphLeft = newWKph; // Set new if lower
     } else {
-      if (newMFps > wMFpsLeft) wMFpsLeft = newMFps; // Set new if lower
+      if (newWKph > wKphLeft) wKphLeft = newWKph; // Set new if lower
     }
   }
   else {
-    wMFpsLeft = (ENC_FACTOR_M * count) / sum;
+    wKphLeft = (USEC_TO_KPH * ((float) count)) / ((float) sum);
   }
-  wFpsLeft = ((float) wMFpsLeft) / 1000.0;
 }
 
+ 
 
 /******************************************************************************
    checkMotors()
@@ -150,9 +149,10 @@ void readSpeedLeft() {
 void checkMotors() {
   checkMotorRight();
   checkMotorLeft();
-  wFps = (wFpsLeft + wFpsRight) / 2.0;
-  wMFps = (wMFpsRight + wMFpsLeft) / 2;
+  wKph = (wKphLeft + wKphRight) / 2.0;
 }
+
+
 
 /******************************************************************************
    checkMotor????()  Called every loop
@@ -161,12 +161,12 @@ void checkMotorRight() {
   float motorGain = MOTOR_GAIN;
   readSpeedRight();
 
-  float wsError = (float) (targetWFpsRight - wFpsRight);
-  if (abs(targetWFpsRight) < 0.5) {  // reduce gain below .5 fps
-    motorGain = 1.0 + (abs(targetWFpsRight) * 8.0);
+  float wsError = (float) (targetWKphRight - wKphRight);
+  if (abs(targetWKphRight) < 0.5) {  // reduce gain below .5 fps
+    motorGain = 1.0 + (abs(targetWKphRight) * 8.0);
   }
-  float wsTarget = targetWFpsRight + (wsError * motorGain);  // Target speed to correct error
-  float pw = abs(wsTarget * FPS_TO_PW) + DEAD_ZONE;            // Pw for the target.
+  float wsTarget = targetWKphRight + (wsError * motorGain);  // Target speed to correct error
+  float pw = abs(wsTarget * KPH_TO_PW) + DEAD_ZONE;            // Pw for the target.
   if (pw <= DEAD_ZONE) pw = 0;
   setMotorRight(pw, wsTarget > 0.0);
 }
@@ -175,12 +175,12 @@ void checkMotorLeft() {
   float motorGain = MOTOR_GAIN;
   readSpeedLeft();
 
-  float wsError = (float) (targetWFpsLeft - wFpsLeft);
-  if (abs(targetWFpsLeft) < 0.5) {  // reduce gain below .5 fps
-    motorGain = 1.0 + (abs(targetWFpsLeft) * 8.0);
+  float wsError = (float) (targetWKphLeft - wKphLeft);
+  if (abs(targetWKphLeft) < 0.5) {  // reduce gain below .5 fps
+    motorGain = 1.0 + (abs(targetWKphLeft) * 8.0);
   }
-  float wsTarget = targetWFpsLeft + (wsError * motorGain);  // Target speed to correct error
-  float pw = abs(wsTarget * FPS_TO_PW) + DEAD_ZONE;            // Pw for the target.
+  float wsTarget = targetWKphLeft + (wsError * motorGain);  // Target speed to correct error
+  float pw = abs(wsTarget * KPH_TO_PW) + DEAD_ZONE;            // Pw for the target.
   if (pw <= DEAD_ZONE) pw = 0;
   setMotorLeft(pw, wsTarget > 0.0);
 }
