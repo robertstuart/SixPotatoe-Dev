@@ -1,6 +1,6 @@
-/******************************************************************************
-    Motor.ino
- ***********************************************************************/
+/*****************************************************************************-
+ *                        Motor.ino
+ *****************************************************************************/
 
 
 /******************************************************************************
@@ -26,7 +26,7 @@ void motorInit() {
   attachInterrupt(digitalPinToInterrupt(ENC_A_LEFT_PIN), encoderIsrLeft, CHANGE);
 }
 
-// Use digitalWrite/ReadFast()? ????????????????????????????????????????????????????
+
 
 /******************************************************************************
  * encoderIsr???()
@@ -36,12 +36,12 @@ void encoderIsrRight() {
   static boolean encBStat;
   long tickPeriodRight;
 
-  boolean encA = (digitalRead(ENC_A_RIGHT_PIN) == HIGH) ? true : false;
+  boolean encA = (digitalReadFast(ENC_A_RIGHT_PIN) == HIGH) ? true : false;
   if (encA == encAStat) return;  // Ignore bogus interrupts
   encAStat = encA;
   unsigned long lastTickTime = tickTimeRight;
   tickTimeRight = micros();
-  boolean encB = (digitalRead(ENC_B_RIGHT_PIN) == HIGH) ? true : false;
+  boolean encB = (digitalReadFast(ENC_B_RIGHT_PIN) == HIGH) ? true : false;
   if (encB == encBStat) return;  // Ignore reversal of direction
   encBStat = encB;
 
@@ -70,12 +70,12 @@ void encoderIsrLeft() {
   static boolean encBStat;
   long tickPeriodLeft;
 
-  boolean encA = (digitalRead(ENC_A_LEFT_PIN) == HIGH) ? true : false;
+  boolean encA = (digitalReadFast(ENC_A_LEFT_PIN) == HIGH) ? true : false;
   if (encA == encAStat) return;  // Ignore bogus interrupts
   encAStat = encA;
   unsigned long lastTickTime = tickTimeLeft;
   tickTimeLeft = micros();
-  boolean encB = (digitalRead(ENC_B_LEFT_PIN) == HIGH) ? true : false;
+  boolean encB = (digitalReadFast(ENC_B_LEFT_PIN) == HIGH) ? true : false;
   if (encB == encBStat) return;  // Ignore reversal of direction.
   encBStat = encB;
 
@@ -190,7 +190,7 @@ void checkMotorLeft() {
    setMotor????() Set pw and diriction. pw between 0-255
  ******************************************************************************/
 void setMotorRight(int pw, bool isFwd) {
-  if (!isRunning  || isMotorDisable) pw = 0;
+  if (!isRunning) pw = 0;
   if (pw > 255) pw = 255;
   else if (pw < 0) pw = 0;
   digitalWrite(DIR_RIGHT_PIN, (isFwd) ? LOW : HIGH);
@@ -198,7 +198,7 @@ void setMotorRight(int pw, bool isFwd) {
 }
 
 void setMotorLeft(int pw, bool isFwd) {
-  if (!isRunning || isMotorDisable) pw = 0;
+  if (!isRunning) pw = 0;
   if (pw > 255) pw = 255;
   else if (pw < 0) pw = 0;
   digitalWrite(DIR_LEFT_PIN, (isFwd) ? HIGH : LOW);

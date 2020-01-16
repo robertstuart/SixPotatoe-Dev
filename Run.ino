@@ -1,5 +1,5 @@
 /******************************************************************************
- * Run.ino  Main loop for controlling balance and steering
+ *                           Run.ino 
  *****************************************************************************/
 #define LOOP_TIMEOUT 10  // milliseconds max loop in case imu failure
 double accelFps = 0.0;
@@ -30,9 +30,7 @@ void run() {
 //  myLog.syncFile();
 //
 
-  delay(200); // For switches?
 
-  setBlink(LED_PIN, 150, 150);
   while(true) { // main loop
     commonTasks();
     // Add code to timeout in imu read!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -40,7 +38,6 @@ void run() {
       if (isGettingUp) gettingUp();
       else balance(); 
       checkMotors();
-      safeAngle();
     } 
   }
 }

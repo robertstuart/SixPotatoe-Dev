@@ -1,87 +1,92 @@
+/*****************************************************************************-
+ *                                 Task.ino
+ *****************************************************************************/
 
-unsigned int ledOnTime = 0UL;
-unsigned int ledOffTime = 0UL;
-unsigned int ledAOnTime = 0UL;
-unsigned int ledAOffTime = 0UL;
-
+ 
 /*****************************************************************************-
  * commonTasks()
  *****************************************************************************/
 void commonTasks() {
+  timeMicroseconds = micros();
+  timeMilliseconds = millis();
   blinkLed();
   switches();
   safeAngle();
   setRunningState();
   blinkLed();
-  timeMicroseconds = micros();
-  timeMilliseconds = millis();
 }
 
 
 
 /*****************************************************************************-
- * setRunningState()
+   setRunningState()
  *****************************************************************************/
 void setRunningState() {
-//  static boolean oldIsRunning = true;
+  static int oldCh4State = 0;
+
+  // Change run state SixPotatoe if there is a change in state on ch4
+  if ((oldCh4State == 0) && (ch4State > 0)) {
+    isRunReady = true;
+    oldCh4State = ch4State; 
+  }
+  else if ((oldCh4State > 0) && (ch4State == 0)) {
+    isRunReady = false;
+    oldCh4State = ch4State;
+  }
 
   // Set isRunning variable to control motors
   if (isRunReady && (isUpright || isGettingUp)) {
     isRunning = true;
-//    if (oldIsRunning == false) {  // State change
-//      oldIsRunning = true;
-//    }
+    currentBlink = On;
   } else {
     isRunning = false;
-//    if (oldIsRunning == true) { // State change
-//      oldIsRunning = false;
-//    } 
+    if (isRunReady) currentBlink = FastFlash;
+    else currentBlink = SlowFlash;
   }
+//  Serial.print(isRunning); Serial.print(" "); Serial.println(isRunning);
 }
 
 
 
 /*****************************************************************************-
- * setBlink()  Set the blink pattern for an LED
- *****************************************************************************/
-void setBlink(int pin, int onTime, int offTime) {
-  if (pin == LED_PIN) {
-    ledOnTime = onTime;
-    ledOffTime = offTime;
-  }
-  if (pin == LED_A_PIN) {
-    ledAOnTime = onTime;
-    ledAOffTime = offTime;
-  }
-}
-
-
-
-/*****************************************************************************-
- * blinkLed()
+   blinkLed()
  *****************************************************************************/
 void blinkLed() {
-  static bool isLedOn = false;
-  static unsigned long ledTrigger = 0;
-  if (timeMilliseconds > ledTrigger) {
-    digitalWrite(LED_PIN, isLedOn ? LOW : HIGH);
-    ledTrigger = timeMilliseconds + (isLedOn ? ledOffTime : ledOnTime);
-    isLedOn = !isLedOn;
-  }
-  static bool isLedAOn = false;
-  static unsigned long ledATrigger = 0;
-  if (timeMilliseconds > ledATrigger) {
-    digitalWrite(LED_A_PIN, isLedAOn ? LOW : HIGH);
-    ledATrigger = timeMilliseconds + (isLedAOn ? ledAOffTime : ledAOnTime);
-    isLedAOn = !isLedAOn;
+  static unsigned long trigger = 0UL;
+  static int blinkCount = 0;
+
+  if (timeMilliseconds > trigger) {
+    trigger = timeMilliseconds + 100;
+    bool ledState = false;
+
+    blinkCount++;
+    switch (currentBlink) {
+      case SlowFlash:
+        ledState = ((blinkCount % 10) == 0);
+        break;
+      case FastFlash:
+        ledState = ((blinkCount % 2) == 0);
+        break;
+      case SlowBlink:
+        ledState = (((blinkCount / 5) % 2) == 0);
+        break;
+      case On:
+        ledState = true;
+        break;
+      case Off:
+      default:
+        break;
+    }
+    digitalWrite(LED_A_PIN, ledState ? HIGH : LOW);
+    digitalWrite(LED_PIN, ((blinkCount / 2) % 2) ? HIGH : LOW);  // Just blink the Teensy
   }
 }
 
 
 
 /*****************************************************************************-
- * safeAngle() Check to see if we have fallen sidways or forwards.
- *    TODO make this dependent on speed
+   safeAngle() Check to see if we have fallen sidways or forwards.
+      TODO make this dependent on speed
  *****************************************************************************/
 void safeAngle() {
   static unsigned long tTime = 0UL; // time of last state change
@@ -92,7 +97,7 @@ void safeAngle() {
     tTime = timeMilliseconds; // Start the timer for a state change to fallen.
   } else if (!cState) {
     if ((timeMilliseconds - tTime) > 50) {
-      isUpright = false; 
+      isUpright = false;
     }
   } else {
     isUpright = true;
@@ -103,15 +108,15 @@ void safeAngle() {
 
 
 /*****************************************************************************-
- * switches()
- *      Check switches and debounce
+   switches()
+        Check switches and debounce
  ******************************************************************************/
 void switches() {
   static unsigned int timerA = 0;
   static boolean aState = false;
   static boolean oldAState = false;
-    
-  // Debounce A switch
+
+  // Debounce switch A
   boolean a = digitalRead(SW_A_PIN) == LOW;
   if (a) timerA = timeMilliseconds;
   if ((timeMilliseconds - timerA) > 50) aState = false;
@@ -129,7 +134,7 @@ void switches() {
 
 
 /*****************************************************************************-
- *  rcInit() 
+    rcInit()
  *****************************************************************************/
 void rcInit() {
   pinMode(CH1_RADIO_PIN, INPUT);
@@ -149,7 +154,7 @@ void rcInit() {
 
 
 /*****************************************************************************-
- *  chXIsr() Interrupt routines for radio pulses
+    chXIsr() Interrupt routines for radio pulses
  *****************************************************************************/
 const int RC_MAX = 2150;
 const int RC_MIN = 872;
@@ -160,7 +165,7 @@ void ch1Isr() {
   unsigned long t = micros();
   if (digitalReadFast(CH1_RADIO_PIN)) riseTime = t;
   else {
-    ch1pw = t - riseTime; 
+    int ch1pw = t - riseTime;
     controllerX = ( 2.0 * ((float) (ch1pw - RC_MID))) / RC_RANGE;
   }
 }
@@ -169,7 +174,7 @@ void ch2Isr() {
   unsigned int t = micros();
   if (digitalReadFast(CH2_RADIO_PIN)) riseTime = t;
   else  {
-    ch2pw = t - riseTime; 
+    int ch2pw = t - riseTime;
     controllerY = ( 2.0 * ((float) (ch2pw - RC_MID))) / RC_RANGE;
   }
 }
@@ -178,7 +183,7 @@ void ch3Isr() {
   unsigned int t = micros();
   if (digitalReadFast(CH3_RADIO_PIN)) riseTime = t;
   else {
-    ch3pw = t - riseTime; 
+    int ch3pw = t - riseTime;
     ch3State = (ch3pw < 1500) ? false : true;
   }
 }
@@ -187,8 +192,7 @@ void ch4Isr() {
   unsigned int t = micros();
   if (digitalReadFast(CH4_RADIO_PIN)) riseTime = t;
   else {
-//    Serial.println(ch4pw);
-    ch4pw = t - riseTime; 
+    int ch4pw = t - riseTime;
     if (ch4pw < 1200) ch4State = 0;
     else if (ch4pw < 1800) ch4State = 1;
     else ch4State = 2;
@@ -199,7 +203,7 @@ void ch5Isr() {
   unsigned int t = micros();
   if (digitalReadFast(CH5_RADIO_PIN)) riseTime = t;
   else {
-    ch5pw = t - riseTime; 
+    int ch5pw = t - riseTime;
     ch5Val = ( 2.0 * ((float) (ch5pw - RC_MID))) / RC_RANGE;
   }
 }
@@ -208,7 +212,7 @@ void ch6Isr() {
   unsigned int t = micros();
   if (digitalReadFast(CH6_RADIO_PIN)) riseTime = t;
   else {
-    ch6pw = t - riseTime; 
+    int ch6pw = t - riseTime;
     ch6Val = ( 2.0 * ((float) (ch6pw - RC_MID))) / RC_RANGE;
   }
 }

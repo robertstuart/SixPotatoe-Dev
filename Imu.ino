@@ -27,7 +27,7 @@ float deltat = 0.05f;                              // integration interval for b
 float q[4] = {0.0f, 0.0f, 0.0f, 0.0f};            // vector to hold quaternion
 
 /*****************************************************************************-
-    imuInit()
+ *   imuInit()
  *****************************************************************************/
 void imuInit() {
   if (imu.begin() != INV_SUCCESS) {
