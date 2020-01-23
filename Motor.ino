@@ -166,8 +166,7 @@ void checkMotorRight() {
     motorGain = 1.0 + (abs(targetWKphRight) * 8.0);
   }
   float wsTarget = targetWKphRight + (wsError * motorGain);  // Target speed to correct error
-  float pw = abs(wsTarget * KPH_TO_PW) + DEAD_ZONE;            // Pw for the target.
-  if (pw <= DEAD_ZONE) pw = 0;
+  float pw = abs(wsTarget * KPH_TO_PW);            // Pw for the target.
   setMotorRight(pw, wsTarget > 0.0);
 }
 
@@ -180,8 +179,7 @@ void checkMotorLeft() {
     motorGain = 1.0 + (abs(targetWKphLeft) * 8.0);
   }
   float wsTarget = targetWKphLeft + (wsError * motorGain);  // Target speed to correct error
-  float pw = abs(wsTarget * KPH_TO_PW) + DEAD_ZONE;            // Pw for the target.
-  if (pw <= DEAD_ZONE) pw = 0;
+  float pw = abs(wsTarget * KPH_TO_PW);            // Pw for the target.
   setMotorLeft(pw, wsTarget > 0.0);
 }
 

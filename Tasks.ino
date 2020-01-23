@@ -14,6 +14,7 @@ void commonTasks() {
   safeAngle();
   setRunningState();
   blinkLed();
+  checkLog();
 }
 
 
@@ -23,16 +24,20 @@ void commonTasks() {
  *****************************************************************************/
 void setRunningState() {
   static int oldCh4State = 0;
+  static boolean isStartup = true;
 
   // Change run state SixPotatoe if there is a change in state on ch4
-  if ((oldCh4State == 0) && (ch4State > 0)) {
+  if (((oldCh4State == 0) && (ch4State > 0)) && !isStartup) {
     isRunReady = true;
-    oldCh4State = ch4State; 
   }
-  else if ((oldCh4State > 0) && (ch4State == 0)) {
+  if ((oldCh4State > 0) && (ch4State == 0)) {
     isRunReady = false;
-    oldCh4State = ch4State;
+    isStartup = false;
   }
+  if ((ch4State == 2) && (oldCh4State < 2)) {
+    setGetUp();
+  }
+  oldCh4State = ch4State;
 
   // Set isRunning variable to control motors
   if (isRunReady && (isUpright || isGettingUp)) {
@@ -108,8 +113,36 @@ void safeAngle() {
 
 
 /*****************************************************************************-
-   switches()
-        Check switches and debounce
+ * checkLog()
+ ******************************************************************************/
+void checkLog() {
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+    if (c == 'd') {
+      Serial.println("data");
+    }
+  }
+}
+
+
+
+/*****************************************************************************-
+ * log()
+ ******************************************************************************/
+void log(String s) {
+  dBuff[dBuffPtr] = s;
+  dBuffPtr++;
+  if (dBuffPtr >= DBUFF_SIZE) {
+    dBuffPtr = 0;
+    isDBuffFull = true;
+  }
+}
+
+
+
+/*****************************************************************************-
+ * switches()
+ *      Check switches and debounce
  ******************************************************************************/
 void switches() {
   static unsigned int timerA = 0;

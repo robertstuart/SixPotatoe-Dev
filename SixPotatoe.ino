@@ -8,21 +8,16 @@
 // Test defines
 const bool IS_TEST1 = false;  // Set to be true for the 1st system test.
 const bool IS_TEST2 = false;  // Set to be true for the 2nd system test.
-const bool IS_TEST3 = true;  // Set to be true for the 3nd system test.
+const bool IS_TEST3 = false;  // Set to be true for the 3nd system test.
+const bool IS_TEST4 = false;  // Set to be true for the 4th system test.
 
 // System constants
 const float GYRO_WEIGHT = 0.997;
 const float WHEEL_DIA_MM = 125.0;
 const float TICKS_PER_ROTATION = 329.5;
 const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
-//const float WHEEL_CIRC_MM = M_PI * WHEEL_DIA_MM;          // Wheel circumference mm
-//const float WHEEL_CIRC_KM = WHEEL_CIRC_K / 1000000.0;      // Wheel curcumference kilometer
-//const float TICKS_PER_KM = TICKS_PER_ROTATION / WHEEL_CIRC_KM;
-//const float ENC_FACTOR = 1.0 / TICKS_PER_METER;
-//const float ENC_FACTOR_MICRO = ENC_FACTOR * 1000000.0;
-const float KPH_TO_PW = 17.5;
-const float DEAD_ZONE = 0.0;
-const float MAX_KPH = 10.0;  // Maximum target for controller
+const float KPH_TO_PW = 8.1;
+const float MAX_KPH = 22.0;  // Maximum target for controller
 
 /*****************************************************************************-
  *  Pin definitions
@@ -128,6 +123,10 @@ volatile float ch5Val = 0.0;        // ch5 top left potentiometer
 volatile float ch6Val = 0.0;        // ch6 top right potentiometer.
 
 char message[200] = "";
+#define DBUFF_SIZE 10000
+int dBuffPtr = 0;
+boolean isDBuffFull = false;
+String dBuff[DBUFF_SIZE];
 
 
 /*****************************************************************************_
@@ -182,6 +181,7 @@ void loop() {
   if (IS_TEST1) systemTest1();
   else if (IS_TEST2)  systemTest2();
   else if (IS_TEST3)  systemTest3();
+  else if (IS_TEST4)  systemTest4();
   else run();
 
 }
@@ -217,16 +217,13 @@ void systemTest2() {
     }
   }
 }
-// Check motor control
+// Check motor controlers
 void systemTest3() {
-  static boolean toggle = false;
-  static int m = 0;
-
   while (true) {
     commonTasks();
     if (isNewImuData()) {
       int x = (int) (controllerX * 20.0);
-      int y = (int) (controllerY * 50.0);
+      int y = (int) (controllerY * 100.0);
       int r = y + x;
       int l = y - x;
       setMotorRight(abs(r), r > 0);
@@ -234,6 +231,21 @@ void systemTest3() {
       readSpeedRight();
       readSpeedLeft();
       sprintf(message, "%7.2f %7.2f %5d %5d %5d", wKphRight, wKphLeft, r, l, isRunning);
+      Serial.println(message);
+    }
+  }
+}
+// Check speed control
+void systemTest4() {
+  while (true) {
+    commonTasks();
+    if (isNewImuData()) {
+      float x = (controllerX * 5.0);
+      float y = (controllerY * 10.0);
+      targetWKphRight = y + x;
+      targetWKphLeft = y - x;
+      checkMotors();
+      sprintf(message, "%7.2f %7.2f %7.2f %7.2f %5d", wKphRight, wKphLeft, x, y, isRunning);
       Serial.println(message);
     }
   }

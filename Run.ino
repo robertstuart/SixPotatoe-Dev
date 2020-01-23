@@ -49,7 +49,6 @@ const double ZERO_ANGLE = 0.5;
  *  balance() 
  ***********************************************************************/
 void balance() {
-       
   // Compute Center of Oscillation speed (cos)
   rotation3 = -gyroPitchDelta * CONST_COS_ROTATION;  // 4.5
 rotation3 = 0.0;
@@ -76,8 +75,10 @@ rotation3 = 0.0;
 
   // Add the angle error to the base speed to get the target wheel speed.
   targetWKph = kphCorrection + coKph;
-
-  speedAdjustment = (((100.0 - abs(controllerY)) * 0.015) + 0.5) * ((float) controllerX * 0.01); 
+  
+  float yfac = (((1.0 - abs(controllerY)) * 01.5) + 0.5) * 2.0;
+  speedAdjustment = -yfac * controllerX; 
+//  Serial.print(yfac); Serial.print("\t"); Serial.print(controllerX); Serial.print("\t"); Serial.println(speedAdjustment);
   targetWKphRight = targetWKph - speedAdjustment;
   targetWKphLeft = targetWKph + speedAdjustment;
 
@@ -101,29 +102,29 @@ void setGetUp() {
  *  gettingUp()
  *****************************************************************************/
 void gettingUp() {
-  float tFps = 0.0;
+  float tKph = 0.0;
   if ((gettingUpStartTime + 1000) < timeMilliseconds) {
     isGettingUp = false;
     isRunReady = false;
     return;
   }
   float ab = abs(gaPitch);
-  if (ab < 7.0) {
+  if (ab < 10.0) {
     isGettingUp = false;
     return;
   }
   bool isBack = (gaPitch > 0.0) ? true : false;
   if ((gettingUpStartTime + 100) > timeMilliseconds) {
-    tFps = -3.0; // Go back at start.
+    tKph = -3.0; // Go backwards at start.
   } else {   
-    if      (ab > 60.0) tFps = 4.0;
-    else if (ab > 30.0) tFps = 4.0;
-    else if (ab > 20.0) tFps = 4.0;
-    else if (ab > 10.0) tFps = 3.0;
-    else tFps = ab * 0.1;
+    if      (ab > 60.0) tKph = 4.0;
+    else if (ab > 30.0) tKph = 4.0;
+    else if (ab > 20.0) tKph = 4.0;
+    else if (ab > 10.0) tKph = 3.0;
+    else tKph = ab * 0.1;
   }
-  if (isBack) tFps = -tFps;
-  targetWKphRight = targetWKphLeft = tFps;
+  if (isBack) tKph = -tKph;
+  targetWKphRight = targetWKphLeft = tKph;
 }
 
 
