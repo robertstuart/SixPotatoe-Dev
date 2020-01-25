@@ -46,7 +46,7 @@ void encoderIsrRight() {
   encBStat = encB;
 
   // Set the speed & tickPosition
-  if (encA == encB) {
+  if (encA != encB) {
     tickPeriodRight = (long) tickTimeRight - (long) lastTickTime;
     tickPositionRight++;
   }
@@ -80,7 +80,7 @@ void encoderIsrLeft() {
   encBStat = encB;
 
   // Set the speed & tickPosition
-  if (encA == encB) {
+  if (encA != encB) {
     tickPeriodLeft = (long) lastTickTime - (long) tickTimeLeft;
     tickPositionLeft--;
   }

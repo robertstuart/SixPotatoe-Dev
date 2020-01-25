@@ -2,8 +2,7 @@
  *                            SixPotatoe.ino
  *****************************************************************************/
 #include <Wire.h>
-#include <SparkFunMPU9250-DMP.h>
-#include "SparkFun_Qwiic_OpenLog_Arduino_Library.h"
+#include "IMU.h"
 
 // Test defines
 const bool IS_TEST1 = false;  // Set to be true for the 1st system test.
@@ -12,7 +11,7 @@ const bool IS_TEST3 = false;  // Set to be true for the 3nd system test.
 const bool IS_TEST4 = false;  // Set to be true for the 4th system test.
 
 // System constants
-const float GYRO_WEIGHT = 0.997;
+//const float GYRO_WEIGHT = 0.997;
 const float WHEEL_DIA_MM = 125.0;
 const float TICKS_PER_ROTATION = 329.5;
 const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
@@ -23,13 +22,13 @@ const float MAX_KPH = 22.0;  // Maximum target for controller
  *  Pin definitions
  *****************************************************************************/
 const int PWM_LEFT_PIN    = 14;
-const int DIR_LEFT_PIN    = 16;
 const int PWM_RIGHT_PIN   = 15;
+const int DIR_LEFT_PIN    = 16;
 const int DIR_RIGHT_PIN   = 17;
 
 const int ENC_A_LEFT_PIN  = 20;
-const int ENC_B_LEFT_PIN  = 22;
-const int ENC_A_RIGHT_PIN = 21;
+const int ENC_B_LEFT_PIN  = 21;
+const int ENC_A_RIGHT_PIN = 22;
 const int ENC_B_RIGHT_PIN = 23;
 
 const int CH1_RADIO_PIN   =  2;
@@ -40,9 +39,11 @@ const int CH5_RADIO_PIN   =  6;
 const int CH6_RADIO_PIN   =  7;
 
 const int LED_PIN         = 13;
-const int LED_A_PIN       = 12;
+const int LED_BU_PIN      = 12;
+const int LED_GN_PIN      = 11;
 
-const int SW_A_PIN        =  9;
+const int SW_BU_PIN       = 10;
+const int SW_GN_PIN       =  9;
 
 // Tunable variables
 float CONST_COS_ROTATION = 4.5;
@@ -64,13 +65,6 @@ enum BlinkState {
 };
 
 BlinkState currentBlink = Off;
-
-// Imu variables
-float gyroPitchDelta = 0.0;
-float gaPitch = 0.0;
-float gaRoll = 0.0;
-float gYaw = 0.0;
-float maPitch = 0.0;
 
 // Motor varialbles
 volatile long tickPositionRight = 0;
@@ -128,6 +122,7 @@ int dBuffPtr = 0;
 boolean isDBuffFull = false;
 String dBuff[DBUFF_SIZE];
 
+IMU imu;
 
 /*****************************************************************************_
  * setup()
@@ -138,14 +133,18 @@ void setup() {
  
   // Motor pins are initialized in motorInit()
   pinMode(LED_PIN, OUTPUT);
-  pinMode(LED_A_PIN, OUTPUT);
-  pinMode(SW_A_PIN, INPUT_PULLUP);
+  pinMode(LED_BU_PIN, OUTPUT);
+  pinMode(LED_GN_PIN, OUTPUT);
+  pinMode(SW_BU_PIN, INPUT_PULLUP);
+  pinMode(SW_GN_PIN, INPUT_PULLUP);
     
   digitalWrite(LED_PIN, HIGH);
-  digitalWrite(LED_A_PIN, LOW);
+  digitalWrite(LED_BU_PIN, LOW);
+  digitalWrite(LED_GN_PIN, LOW);
 
   rcInit(); 
-  imuInit();
+  imu.imuInit(&Serial, Wire, 1);
+//  imuInit();
   motorInit();
   delay(100); // For switches?
 
@@ -197,31 +196,34 @@ void systemTest1() {
   static unsigned long lastT = 0;
   static boolean toggle = false;
   static int m = 0;
-  if (isNewImuData()) {
+  if (imu.isNewImuData()) {
     unsigned long newT = millis();
-    sprintf(message, "%2d ms   %7.2f degrees", newT - lastT, maPitch);
+    sprintf(message, "%2d ms   %7.2f degrees", newT - lastT, imu.maPitch);
     Serial.println(message);
     lastT = newT;
-    if ((m++ % 10) == 0) digitalWrite(LED_PIN, (toggle = !toggle) ? HIGH : LOW);
+    blink13();
   }
 }
-// Check the RC controller
+// Check the RC controller and battery power
 void systemTest2() {
   static boolean toggle = false;
   static int m = 0;
-  if (isNewImuData()) {
+  if (imu.isNewImuData()) {
     if ((m++ % 10) == 0) { 
       digitalWrite(LED_PIN, (toggle = !toggle) ? HIGH : LOW);
-      sprintf(message, "%5.2f %5.2f %5d %5d %5.2f %5.2f", controllerX, controllerY, ch3State, ch4State, ch5Val, ch6Val);
+      sprintf(message, 
+              "ch1:%5.2f     ch2:%5.2f     ch3:%1d     ch4:%1d     ch5:%5.2f      ch6:%5.2f", 
+              controllerX, controllerY, ch3State, ch4State, ch5Val, ch6Val);
       Serial.println(message);
     }
+    blink13();
   }
 }
 // Check motor controlers
 void systemTest3() {
   while (true) {
     commonTasks();
-    if (isNewImuData()) {
+    if (imu.isNewImuData()) {
       int x = (int) (controllerX * 20.0);
       int y = (int) (controllerY * 100.0);
       int r = y + x;
@@ -239,7 +241,7 @@ void systemTest3() {
 void systemTest4() {
   while (true) {
     commonTasks();
-    if (isNewImuData()) {
+    if (imu.isNewImuData()) {
       float x = (controllerX * 5.0);
       float y = (controllerY * 10.0);
       targetWKphRight = y + x;

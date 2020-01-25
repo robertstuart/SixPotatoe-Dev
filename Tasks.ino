@@ -58,34 +58,40 @@ void setRunningState() {
  *****************************************************************************/
 void blinkLed() {
   static unsigned long trigger = 0UL;
-  static int blinkCount = 0;
+  static unsigned int blinkCount = 0;
 
   if (timeMilliseconds > trigger) {
     trigger = timeMilliseconds + 100;
-    bool ledState = false;
+    bool buState, gnState;
 
     blinkCount++;
     switch (currentBlink) {
       case SlowFlash:
-        ledState = ((blinkCount % 10) == 0);
+        buState = ((blinkCount % 10) == 0);
+        gnState = ((blinkCount % 10) == 1);
         break;
       case FastFlash:
-        ledState = ((blinkCount % 2) == 0);
+        gnState = buState = ((blinkCount % 2) == 0);
         break;
       case SlowBlink:
-        ledState = (((blinkCount / 5) % 2) == 0);
+        gnState = buState = (((blinkCount / 5) % 2) == 0);
         break;
       case On:
-        ledState = true;
+        buState = gnState = true;
         break;
       case Off:
       default:
         break;
     }
-    digitalWrite(LED_A_PIN, ledState ? HIGH : LOW);
-    digitalWrite(LED_PIN, ((blinkCount / 2) % 2) ? HIGH : LOW);  // Just blink the Teensy
+    digitalWrite(LED_BU_PIN, buState ? HIGH : LOW);
+    digitalWrite(LED_GN_PIN, gnState ? HIGH : LOW);
   }
 }
+void blink13() {  // Just blink the Teensy
+  static unsigned int blinkCount;
+  digitalWrite(LED_PIN, ((blinkCount++ / 50) % 2) ? HIGH : LOW);
+}
+
 
 
 
@@ -97,7 +103,7 @@ void safeAngle() {
   static unsigned long tTime = 0UL; // time of last state change
   static boolean tState = false;  // Timed state. true = upright
 
-  boolean cState = (abs(gaPitch) < 70.0); // Current real state
+  boolean cState = (abs(imu.maPitch) < 70.0); // Current real state
   if (!cState && tState) {
     tTime = timeMilliseconds; // Start the timer for a state change to fallen.
   } else if (!cState) {
@@ -145,21 +151,32 @@ void log(String s) {
  *      Check switches and debounce
  ******************************************************************************/
 void switches() {
-  static unsigned int timerA = 0;
-  static boolean aState = false;
-  static boolean oldAState = false;
+  static unsigned int timerBu = 0;
+  static boolean buState = false;
+  static boolean oldBuState = false;
+  static unsigned int timerGn = 0;
+  static boolean gnState = false;
+  static boolean oldGnState = false;
 
-  // Debounce switch A
-  boolean a = digitalRead(SW_A_PIN) == LOW;
-  if (a) timerA = timeMilliseconds;
-  if ((timeMilliseconds - timerA) > 50) aState = false;
-  else aState = true;
-
-  // Switch A press transition
-  if (aState && (!oldAState)) {
+  // Debounce blue switch 
+  boolean swState = digitalRead(SW_BU_PIN) == LOW;
+  if (swState) timerBu = timeMilliseconds;
+  if ((timeMilliseconds - timerBu) > 50) buState = false;
+  else buState = true;
+  if (buState && (!oldBuState)) {  // Blue switch press transition?
     isRunReady = !isRunReady;
   }
-  oldAState = aState;
+  oldBuState = buState;
+
+  // Debounce green switch 
+  swState = digitalRead(SW_GN_PIN) == LOW;
+  if (swState) timerGn = timeMilliseconds;
+  if ((timeMilliseconds - timerGn) > 50) gnState = false;
+  else gnState = true;
+  if (gnState && (!oldGnState)) {  // Green Switch press transition?
+    isRunReady = !isRunReady;
+  }
+  oldGnState = gnState;
 }
 
 
