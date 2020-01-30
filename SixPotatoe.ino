@@ -1,6 +1,7 @@
 /*****************************************************************************-
  *                            SixPotatoe.ino
  *****************************************************************************/
+#include <vector>
 #include <Wire.h>
 #include "IMU.h"
 
@@ -39,15 +40,15 @@ const int CH5_RADIO_PIN   =  6;
 const int CH6_RADIO_PIN   =  7;
 
 const int LED_PIN         = 13;
-const int LED_BU_PIN      = 12;
-const int LED_GN_PIN      = 11;
+const int LED_GN_PIN      = 12;
+const int LED_BU_PIN      = 11;
 
 const int SW_BU_PIN       = 10;
 const int SW_GN_PIN       =  9;
 
 // Tunable variables
-float CONST_COS_ROTATION = 4.5;
-float CONST_COS_LPF = 0.98;
+float CONST_COKPH_ROTATION = 2.1;
+float CONST_COKPH_TC = 0.05; // 1.0 passes all hf, near zero passes only low freq.
 float valSetV = 2.7;
 float CONST_ACCEL_LPF = 0.95;  
 //float CONST_ACCEL_PITCH = x.x;   // Cancel out acceleration from gPitch
@@ -55,6 +56,11 @@ float CONST_ERROR_TO_ANGLE = 2.0;
 float CONST_ANGLE_TO_KPH = 0.2;
 float ACCEL_PITCH_OFFSET = 1.4;   // pitch offset
 float MOTOR_GAIN = 3.0;
+float K12 = 50.0;   // +- constraint on target pitch
+float K13 = 35.0;   // +- constraint on pitch error to prevent too rapid righting
+int   K14 = 500;    // ms to get back up again after fall
+float K15 = 70;     // pitch beyond which is considered to not be upright
+int   K16 = 500;    // ms after fall to stay down
 
 enum BlinkState {
   Off,
@@ -65,6 +71,12 @@ enum BlinkState {
 };
 
 BlinkState currentBlink = Off;
+
+#define N_LOGS 15000  // 15k near max before running out of memory
+float logFloats[4][N_LOGS];
+int logCount = 0;
+boolean isLogWrap = false;
+String logHeader = "No Header";
 
 // Motor varialbles
 volatile long tickPositionRight = 0;
@@ -79,28 +91,26 @@ float wKphRight = 0.0;
 float wKphLeft = 0.0;
 float wKph = 0.0;
 float targetWKphRight = 0.0;
+float motorTargetKphRight = 0.0;
 float targetWKphLeft = 0.0;
-
+float motorTargetKphLeft = 0.0;
 // Run variables
-float rotation3 = 0.0;
-float cos3 = 0.0;
-float lpfCos3 = 0.0;
-float lpfCos3Old = 0.0;
+float rotation = 0.0;
 float coKph = 0.0;
+float coKphOld = 0.0;
 float targetCoKph = 0.0;
 float targetWKph = 0.0;
-bool isGettingUp = false;
-unsigned long gettingUpStartTime = 0;
+boolean isStartGetUp = false;
+boolean isGettingUp = false;
 
 unsigned long timeMilliseconds = 0UL;
 unsigned long timeMicroseconds = 0UL;
 bool isRunning = false;
 bool isRunReady = false;
 bool isUpright = false;
-bool isRcActive = true;  // Set this false if signal disappears.
 
 //int bCount = 0;
-unsigned long upStatTime = 0UL;
+//unsigned long upStatTime = 0UL;
 
 long tickPosition = 0L;
 double coTickPosition = 0.0;
@@ -114,6 +124,7 @@ volatile float controllerY = 0.0;   // ch2 accelerator
 volatile boolean ch3State = false;  // ch3 toggle
 volatile int ch4State = 0;          // ch4 3-position switch
 volatile float ch5Val = 0.0;        // ch5 top left potentiometer
+volatile int ch5State = 0;
 volatile float ch6Val = 0.0;        // ch6 top right potentiometer.
 
 char message[200] = "";
@@ -144,31 +155,14 @@ void setup() {
 
   rcInit(); 
   imu.imuInit(&Serial, Wire, 1);
-//  imuInit();
   motorInit();
   delay(100); // For switches?
 
   
-////  delay(10);
-//  OpenLog myLog; //Create instance
-////  delay(10);
-//  myLog.begin(); //Open connection to OpenLog (no pun intended)
-////  delay(10);
-//  Serial.println(myLog.getVersion());
-//  Serial.println("OpenLog Write File Test2");
-//  myLog.println("This2 goes to the log file2");
-////  delay(10);
-//  Serial.println("This goes to the terminal2");
-//  float batteryVoltage = 3.4;
-//  myLog.println("Batt voltage2: " + String(batteryVoltage));
-////  delay(10);
-//  batteryVoltage = batteryVoltage + 0.71;
-//  myLog.println("Batt voltage2: " + String(batteryVoltage));
-////  delay(10);
-//  myLog.syncFile();
-//  Serial.println(F("Done2!"));
-
-
+//  for (int i = 0; i < 200; i++) {
+//    sprintf(message, "%3d,%6.2f,%7.3f", i, sin((float) i), cos((float) i)); 
+//    log();
+//  }
 }
 
 
@@ -182,7 +176,6 @@ void loop() {
   else if (IS_TEST3)  systemTest3();
   else if (IS_TEST4)  systemTest4();
   else run();
-
 }
 
 
@@ -194,11 +187,9 @@ void loop() {
 // Check IMU
 void systemTest1() {
   static unsigned long lastT = 0;
-  static boolean toggle = false;
-  static int m = 0;
   if (imu.isNewImuData()) {
     unsigned long newT = millis();
-    sprintf(message, "%2d ms   %7.2f degrees", newT - lastT, imu.maPitch);
+    sprintf(message, "%2d ms   %7.2f degrees", ((int) (newT - lastT)), imu.maPitch);
     Serial.println(message);
     lastT = newT;
     blink13();
@@ -246,7 +237,7 @@ void systemTest4() {
       float y = (controllerY * 10.0);
       targetWKphRight = y + x;
       targetWKphLeft = y - x;
-      checkMotors();
+      runMotors();
       sprintf(message, "%7.2f %7.2f %7.2f %7.2f %5d", wKphRight, wKphLeft, x, y, isRunning);
       Serial.println(message);
     }

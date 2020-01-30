@@ -133,11 +133,11 @@ void IMU::compFilter(float gyroX, float gyroY, float gyroZ, float accelX, float 
   static float gRoll = 0.0;
   static float gYaw = 0.0;
 
-  gyroPitchDelta = -gyroX / sampleFreq; // degrees changed during period
+  gyroPitchDelta = -gyroY / sampleFreq; // degrees changed during period
   gPitch += gyroPitchDelta;   // Debugging
   gaPitch = gyroPitchDelta + gaPitch;  // used in weighting final angle
 
-  float gyroRollDelta = gyroY / sampleFreq;
+  float gyroRollDelta = gyroX / sampleFreq;
   gRoll += gyroRollDelta;
   gaRoll = gaRoll - gyroRollDelta;
 
@@ -259,8 +259,8 @@ void MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float
 boolean IMU::isNewImuData() {
 
   if (imu.dataReady()) {
-    static unsigned long t1 = 0UL;
-    unsigned long t2 = micros();
+//    static unsigned long t1 = 0UL;
+//    unsigned long t2 = micros();
     imu.getAGMT();
 //    printScaledAGMT();   // This function takes into account the sclae settings from when the measurement was made to calculate the values with units
 
@@ -279,15 +279,16 @@ boolean IMU::isNewImuData() {
 //    _serialOut->println(message);
 
     compFilter(gyroPitchDelta, gyroRollDelta, gyroYawDelta, accelX, accelY, accelZ);
+    accelUpdate();
     //    MadgwickQuaternionUpdate(accelX, accelY, accelZ, gyroXrad, gyroYrad, gyroZrad);
     MahonyAHRSupdateIMU(gyroXrad, gyroYrad, gyroZrad, accelX, accelY, accelZ);
 
-    float maRoll  = -atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
-    maPitch = asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
-    float maYaw   = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
-    maPitch *= RAD_TO_DEG;
-    maRoll  *= RAD_TO_DEG;
-    maYaw   *= RAD_TO_DEG;
+    maRollRad  = -atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
+    maPitchRad = asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
+    maYawRad   = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
+    maPitch = maPitchRad * RAD_TO_DEG;
+    maRoll  = maRollRad * RAD_TO_DEG;
+    maYaw   = maYawRad * RAD_TO_DEG;
 
 
 //    sprintf(message, "%7.2f %7.2f %7.2f %7.2f %7.2f %7d", maPitch, maRoll, maYaw, gaPitch, gaRoll, t2 - t1);
@@ -298,6 +299,15 @@ boolean IMU::isNewImuData() {
   } else {
     return false; // no IMU read
   }
+}
+
+/*****************************************************************************-
+ *  accelUpdate()  Compute vertical acceleration and horizontal speed from
+ *                 the acceleration along the y/x? axis.
+ *****************************************************************************/
+void IMU::accelUpdate() {
+//  tireZAccel = (cos(gaPitch * DEG_TO_RAD) * accelZ) + (sin(gaPitch * DEG_TO_RAD) * accelY);
+//  tireYAccel = (sin(gaPitch * DEG_TO_RAD) * accelZ) + (cos(gaPitch * DEG_TO_RAD) * accelY);
 }
 
 void IMU::printFormattedFloat(float val, uint8_t leading, uint8_t decimals){

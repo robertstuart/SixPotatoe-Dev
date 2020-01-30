@@ -1,5 +1,5 @@
 /*****************************************************************************-
- *                                 Task.ino
+ *                                 Tasks.ino
  *****************************************************************************/
 
  
@@ -11,36 +11,39 @@ void commonTasks() {
   timeMilliseconds = millis();
   blinkLed();
   switches();
-  safeAngle();
+  checkUpright();
   setRunningState();
-  blinkLed();
-  checkLog();
+  checkLogDump();
 }
 
 
 
 /*****************************************************************************-
-   setRunningState()
+ * setRunningState()
  *****************************************************************************/
 void setRunningState() {
+  static int oldCh3State = 0;
   static int oldCh4State = 0;
-  static boolean isStartup = true;
+
+  // Run a plan if ch3 turns on
+  if ((ch3State == true) && (oldCh3State == false)) {
+    isStartGetUp = true;
+  }
+  oldCh3State = ch3State;
 
   // Change run state SixPotatoe if there is a change in state on ch4
-  if (((oldCh4State == 0) && (ch4State > 0)) && !isStartup) {
+  if (ch4State == 2) { // Panic?
+    isRunReady = false;
+  } else if ((ch4State == 1) && (oldCh4State != 1)) { // Transistion to 1?
     isRunReady = true;
   }
-  if ((oldCh4State > 0) && (ch4State == 0)) {
+  else if ((ch4State == 0) && (oldCh4State != 0)) {  // Transition to 0?
     isRunReady = false;
-    isStartup = false;
-  }
-  if ((ch4State == 2) && (oldCh4State < 2)) {
-    setGetUp();
   }
   oldCh4State = ch4State;
 
   // Set isRunning variable to control motors
-  if (isRunReady && (isUpright || isGettingUp)) {
+  if (isRunReady && isUpright) {
     isRunning = true;
     currentBlink = On;
   } else {
@@ -54,7 +57,7 @@ void setRunningState() {
 
 
 /*****************************************************************************-
-   blinkLed()
+ * blinkLed()
  *****************************************************************************/
 void blinkLed() {
   static unsigned long trigger = 0UL;
@@ -81,10 +84,13 @@ void blinkLed() {
         break;
       case Off:
       default:
+        buState = gnState = false;
         break;
     }
-    digitalWrite(LED_BU_PIN, buState ? HIGH : LOW);
-    digitalWrite(LED_GN_PIN, gnState ? HIGH : LOW);
+    analogWrite(LED_BU_PIN, buState ? 80 : 0);
+    analogWrite(LED_GN_PIN, gnState ? 50 : 0);
+//    digitalWrite(LED_BU_PIN, buState ? HIGH : LOW);
+//    digitalWrite(LED_GN_PIN, gnState ? HIGH : LOW);
   }
 }
 void blink13() {  // Just blink the Teensy
@@ -94,38 +100,75 @@ void blink13() {  // Just blink the Teensy
 
 
 
-
 /*****************************************************************************-
-   safeAngle() Check to see if we have fallen sidways or forwards.
-      TODO make this dependent on speed
+ * checkUpright() Check to see if we have fallen.  Give K14 ms to get back up
+ *                again before setting usUpright to false;
  *****************************************************************************/
-void safeAngle() {
-  static unsigned long tTime = 0UL; // time of last state change
-  static boolean tState = false;  // Timed state. true = upright
+void checkUpright() {
+  static unsigned long lastUpTime = 0UL;
 
-  boolean cState = (abs(imu.maPitch) < 70.0); // Current real state
-  if (!cState && tState) {
-    tTime = timeMilliseconds; // Start the timer for a state change to fallen.
-  } else if (!cState) {
-    if ((timeMilliseconds - tTime) > 50) {
-      isUpright = false;
-    }
-  } else {
-    isUpright = true;
+  if (isStartGetUp) {
+    isStartGetUp = false;
+    gettingUp(true); // Reset
+    lastUpTime = timeMilliseconds;
   }
-  tState = cState;
+
+  boolean cState = (abs(imu.maPitch) < K15); // Current real state
+  if (cState == true) {
+    isUpright = true;
+    lastUpTime = timeMilliseconds;
+  } else {
+     if (timeMilliseconds > (lastUpTime + K16)) {
+        isUpright = false;
+      } else {
+        isUpright = true;
+      }
+  }
 }
 
 
 
+
+
+//
+//  
+////  isUpright = true; return;
+//  static unsigned long tTime = 0UL; // time of last state change
+//  static boolean tState = false;  // Timed state. true = upright
+//
+//  boolean cState = (abs(imu.maPitch) < K15); // Current real state
+//  if (!cState && tState) {
+//    tTime = timeMilliseconds; // Start the timer for a state change to fallen.
+//  } else if (!cState) {
+//    if ((timeMilliseconds - tTime) > 50) {
+//      isUpright = false;
+//    }
+//  } else {
+//    isUpright = true;
+//  }
+//  tState = cState;
+//}
+
+
+
 /*****************************************************************************-
- * checkLog()
- ******************************************************************************/
-void checkLog() {
+ * checkLogDump() Dump the log to the terminal so that the data can be 
+ *                captured and analyzed by Excel.
+ *****************************************************************************/
+void checkLogDump() {
   while (Serial.available() > 0) {
     char c = Serial.read();
     if (c == 'd') {
-      Serial.println("data");
+      Serial.println(logHeader);
+      int end = (isLogWrap) ? N_LOGS : logCount;
+      for (int i = 0; i < end; i++) {
+        sprintf(message, "%12.2f,%9.2f,%9.2f,%9.2f", 
+                logFloats[0][i],
+                logFloats[1][i],
+                logFloats[2][i],
+                logFloats[3][i]);
+        Serial.println(message);
+      }
     }
   }
 }
@@ -134,13 +177,16 @@ void checkLog() {
 
 /*****************************************************************************-
  * log()
- ******************************************************************************/
-void log(String s) {
-  dBuff[dBuffPtr] = s;
-  dBuffPtr++;
-  if (dBuffPtr >= DBUFF_SIZE) {
-    dBuffPtr = 0;
-    isDBuffFull = true;
+ *****************************************************************************/
+void log(float a, float b, float c, float d) {
+  logFloats[0][logCount] = a;
+  logFloats[1][logCount] = b;
+  logFloats[2][logCount] = c;
+  logFloats[3][logCount] = d;
+  logCount++;
+  if (logCount >= N_LOGS) {
+    logCount = 0;
+    isLogWrap = true;
   }
 }
 
@@ -184,7 +230,7 @@ void switches() {
 
 
 /*****************************************************************************-
-    rcInit()
+ *  rcInit()
  *****************************************************************************/
 void rcInit() {
   pinMode(CH1_RADIO_PIN, INPUT);
@@ -204,7 +250,7 @@ void rcInit() {
 
 
 /*****************************************************************************-
-    chXIsr() Interrupt routines for radio pulses
+ *  chXIsr() Interrupt routines for radio pulses
  *****************************************************************************/
 const int RC_MAX = 2150;
 const int RC_MIN = 872;
@@ -255,6 +301,11 @@ void ch5Isr() {
   else {
     int ch5pw = t - riseTime;
     ch5Val = ( 2.0 * ((float) (ch5pw - RC_MID))) / RC_RANGE;
+    if (ch5Val < -0.8) ch5State = 0;
+    else if (ch5Val < -0.2) ch5State = 1;
+    else if (ch5Val < 0.2) ch5State = 2;
+    else if (ch5Val < 0.8) ch5State = 3;
+    else ch5State = 4;
   }
 }
 void ch6Isr() {

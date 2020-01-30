@@ -54,9 +54,6 @@ void encoderIsrRight() {
     tickPeriodRight = (long) lastTickTime - (long) tickTimeRight;
     tickPositionRight--;
   }
-  //  int mFpsRight = (ENC_FACTOR_M / tickPeriodRight); // speed in milli-fps
-  //  fpsSumRight += mFpsRight;
-  //  fpsCountRight++;
   tickSumRight += tickPeriodRight;
   tickCountRight++;
 } // encoderIsrRight()
@@ -88,9 +85,6 @@ void encoderIsrLeft() {
     tickPeriodLeft = (long)tickTimeLeft - (long) lastTickTime;
     tickPositionLeft++;
   }
-  //  int mFpsLeft = (ENC_FACTOR_M / tickPeriodLeft); // speed in milli-fps
-  //  fpsSumLeft += mFpsLeft;
-  //  fpsCountLeft++;
   tickSumLeft += tickPeriodLeft;
   tickCountLeft++;
 } // end encoderIsrLeft();
@@ -144,20 +138,20 @@ void readSpeedLeft() {
  
 
 /******************************************************************************
-   checkMotors()
+   runMotors()
  *****************************************************************************/
-void checkMotors() {
-  checkMotorRight();
-  checkMotorLeft();
+void runMotors() {
+  runMotorRight();
+  runMotorLeft();
   wKph = (wKphLeft + wKphRight) / 2.0;
 }
 
 
 
 /******************************************************************************
-   checkMotor????()  Called every loop
+ * runMotor????()  Called every loop
  *****************************************************************************/
-void checkMotorRight() {
+void runMotorRight() {
   float motorGain = MOTOR_GAIN;
   readSpeedRight();
 
@@ -165,12 +159,12 @@ void checkMotorRight() {
   if (abs(targetWKphRight) < 0.5) {  // reduce gain below .5 fps
     motorGain = 1.0 + (abs(targetWKphRight) * 8.0);
   }
-  float wsTarget = targetWKphRight + (wsError * motorGain);  // Target speed to correct error
-  float pw = abs(wsTarget * KPH_TO_PW);            // Pw for the target.
-  setMotorRight(pw, wsTarget > 0.0);
+  motorTargetKphRight = targetWKphRight + (wsError * motorGain);  // Target speed to correct error
+  float pw = abs(motorTargetKphRight * KPH_TO_PW);            // Pw for the target.
+  setMotorRight(pw, motorTargetKphRight > 0.0);
 }
 
-void checkMotorLeft() {
+void runMotorLeft() {
   float motorGain = MOTOR_GAIN;
   readSpeedLeft();
 
@@ -178,9 +172,9 @@ void checkMotorLeft() {
   if (abs(targetWKphLeft) < 0.5) {  // reduce gain below .5 fps
     motorGain = 1.0 + (abs(targetWKphLeft) * 8.0);
   }
-  float wsTarget = targetWKphLeft + (wsError * motorGain);  // Target speed to correct error
-  float pw = abs(wsTarget * KPH_TO_PW);            // Pw for the target.
-  setMotorLeft(pw, wsTarget > 0.0);
+  motorTargetKphLeft = targetWKphLeft + (wsError * motorGain);  // Target speed to correct error
+  float pw = abs(motorTargetKphLeft * KPH_TO_PW);            // Pw for the target.
+  setMotorLeft(pw, motorTargetKphLeft > 0.0);
 }
 
 

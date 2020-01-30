@@ -14,10 +14,17 @@ private:
   char message[80];
 
   void accelSet(float accelX, float accelY, float accelZ);
+  void accelUpdate();
   void compFilter(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ);
   void MadgwickQuaternionUpdate(float ax, float ay, float az, float gx, float gy, float gz);
   void printFormattedFloat(float val, uint8_t leading, uint8_t decimals);
   void setSampleRate(float smplFreq);
+
+  float maPitchRad = 0.0;
+  float maRollRad = 0.0;
+  float maYawRad = 0.0;
+  float maRoll = 0.0;
+  float maYaw = 0.0;
 
 protected:
 
