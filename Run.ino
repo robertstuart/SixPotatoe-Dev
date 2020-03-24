@@ -1,7 +1,6 @@
-/******************************************************************************
+/*****************************************************************************-
  *                           Run.ino 
  *****************************************************************************/
-#define LOOP_TIMEOUT 10  // milliseconds max loop in case imu failure
 //double accelFps = 0.0;
 //double coAccelFps = 0.0;
 //double lpfAccelFps = 0.0;
@@ -14,39 +13,39 @@ float targetPitch = 0.0;
 float kphAdjustment = 0.0;
 
 
-/******************************************************************************
+/*****************************************************************************-
  *  run() Continuous loop for doing all tasks.
  *****************************************************************************/
 void run() {
   while(true) { // main loop
     commonTasks();
     if (imu.isNewImuData()) { 
+      updateCartesian();
       if (isGettingUp) gettingUp(false);
-//      else if (isStandingStill();
       else balance(); 
       runMotors();
       blink13();
+      watchdog();
     } 
   }
 }
 
-boolean isStandingStill() { return false; }
 
-//const double ZERO_ANGLE = 0.5;
-/***********************************************************************.
+
+/*****************************************************************************-
  *  balance() 
  ***********************************************************************/
 void balance() {
   // Compute Center of Oscillation speed (cos)
-  rotation = imu.gyroPitchDelta * CONST_COKPH_ROTATION;  // 4.5
+  float delta = imu.gyroPitchDelta * cos(DEG_TO_RAD * imu.maPitch); // account for pitch
+  rotation = delta * K1;  // ~1.6
   coKph = wKph - rotation;
-//  float tc = (wKph < 0.6) ? 
   // 0.92?, 1.0 = no hf filtering, small values give slow response
-  coKph = (coKphOld * (1 - CONST_COKPH_TC)) + (coKph * CONST_COKPH_TC);
+  coKph = (coKphOld * (1 - K2)) + (coKph * K2);
   coKphOld = coKph;
 
   // Get the controller target speed.
-  targetCoKph = controllerY * MAX_KPH;
+  targetCoKph = (isRouteInProgress) ? routeKph : controllerY * MAX_KPH;
 
   // Find the speed error.  Constrain rate of change?
   float coKphError = targetCoKph - coKph;
@@ -61,38 +60,82 @@ void balance() {
   angleError = targetPitch - imu.maPitch;
   angleError = constrain(angleError, -K13, K13); // prevent "jumping"
   kphCorrection = angleError * CONST_ANGLE_TO_KPH; // 0.4 ******************* Angle error to speed *******************
+//  kphCorrection += imu.gyroPitchDelta *  0.2; // add "D" to reduce overshoot
 
   // Add the angle error to the base speed to get the target wheel speed.
   targetWKph = kphCorrection + coKph;
-  
-  float yfac = (((1.0 - abs(controllerY)) * 01.5) + 0.5) * 2.0;
-  kphAdjustment = -yfac * controllerX; 
-//  Serial.print(yfac); Serial.print("\t"); Serial.print(controllerX); Serial.print("\t"); Serial.println(speedAdjustment);
-  targetWKphRight = targetWKph - kphAdjustment;
-  targetWKphLeft = targetWKph + kphAdjustment;
 
-  if (isRunning) {
-    logHeader = "maPitch, wKph, targetWKphRight, gyroPitchDelta";
-    log(imu.maPitch, wKph, targetWKphRight, imu.gyroPitchDelta);
+  if (isRouteInProgress) steerRoute(); else steerRC();
+
+  static bool isLogging = false;
+  static unsigned long endLogT = 0UL;
+  if (isGotUp || isLogging) {
+    logHeader = "maPitch, kphCorrection, gyroPitchDelta, coKph";
+    log(imu.maPitch, kphCorrection, imu.gyroPitchDelta, coKph);
+    if (isGotUp) {
+      isGotUp = false;
+      endLogT = timeMilliseconds + 1500;
+      isLogging = true;
+    } else {
+      if (timeMilliseconds > endLogT) {
+        isLogging = false;
+      }
+    }
   }
 } // end balance() 
 
 
 
-///******************************************************************************
-// *  setGetUp()
-// *****************************************************************************/
-//void setGetUp() {
-//  if(!isUpright) {
-//    isRunReady = true;
-//    isGettingUp = true;
-//    gettingUpStartTime = timeMilliseconds;
-//  }
+/*****************************************************************************-
+ *  steerRC()
+ *****************************************************************************/
+//void steerRC() {
+////float k = 0.2;
+////targetWKphRight = targetWKph * (1.0 + k);
+////targetWKphLeft = targetWKph * (1.0 - k);;
+//
+//  float diff = (0.75 * controllerX)/ (1.0 - controllerX);
+//  float radius = 0.15 / diff;
+//  float maxRadius = (coKph * coKph)/125;
+//  float maxDiff = 0.15 / maxRadius;
+////  if (abs(diff) > maxDiff) {
+////    if (coKph > 0.0) diff = maxDiff;
+////    else diff = -maxDiff;
+////  }
+//  targetWKphRight = targetWKph * (1.0 + diff);
+//  targetWKphLeft = targetWKph * (1.0 - diff);
 //}
+
+void steerRC() {
+  float yfac = (((1.0 - abs(controllerY)) * 01.5) + 0.5) * 2.0;
+  kphAdjustment = -yfac * controllerX; 
+  targetWKphRight = targetWKph - kphAdjustment;
+  targetWKphLeft = targetWKph + kphAdjustment;
+}
+
+
+
+/*****************************************************************************-
+ *  watchdog() Just toggle to keep watchdog alive
+ *****************************************************************************/
+void watchdog() {
+  static bool toggle = false;
+  toggle = !toggle;
+//  if (ch6Val > 0.0) {
+    digitalWrite(WATCHDOG_PIN, toggle ? LOW : HIGH);
+//  }
+}
+
+
+
+/*****************************************************************************-
+ *  gettingUp()
+ *****************************************************************************/
 void gettingUp(bool reset) {
   static unsigned long gettingUpStartTime = 0UL;
   if (reset) {
     if(!isUpright) {
+      isGotUp = true;
       isRunReady = true;
       isGettingUp = true;
       gettingUpStartTime = timeMilliseconds;
@@ -104,44 +147,13 @@ void gettingUp(bool reset) {
       targetWKphRight = targetWKphLeft = tKph;
     } else {
       isGettingUp = false;
-//      isGetUp = true;  // Reset timer
     }
   }
 }
 
 
-///******************************************************************************
-// *  gettingUp()
-// *****************************************************************************/
-//void gettingUp() {
-//  float tKph = 0.0;
-//  if ((gettingUpStartTime + 1000) < timeMilliseconds) {
-//    isGettingUp = false;
-//    isRunReady = false;
-//    return;
-//  }
-//  float ab = abs(imu.maPitch);
-//  if (ab < 10.0) {
-//    isGettingUp = false;
-//    return;
-//  }
-//  bool isBack = (imu.maPitch > 0.0) ? true : false;
-//  if ((gettingUpStartTime + 100) > timeMilliseconds) {
-//    tKph = -3.0; // Go backwards at start.
-//  } else {   
-//    if      (ab > 60.0) tKph = 6.0;
-//    else if (ab > 30.0) tKph = 6.0;
-//    else if (ab > 20.0) tKph = 6.0;
-//    else if (ab > 10.0) tKph = 4.0;
-//    else tKph = ab * 0.1;
-//  }
-//  if (isBack) tKph = -tKph;
-//  targetWKphRight = targetWKphLeft = tKph;
-//}
-//
 
-
-/***********************************************************************.
+/*****************************************************************************-
  *  sendLog() Called 200 times/sec.
  *      Set modcount to 1 to log every loop. Set to 100 to log 
  *      every 1/2 sec, etc.
@@ -154,5 +166,4 @@ void sendLog() {
   if ((modCount % 1) == 0) {
     // logging code here.
   }
-  
 }

@@ -1,12 +1,8 @@
-#include "IMU.h"
-
-/*************************
- * ****************************************************-
- *                                   IMU.cpp
+/*****************************************************************************-
+ *                                 IMU.cpp
  *****************************************************************************/
-
+#include "IMU.h"
 #define sampleFreq  200.0f      // sample frequency in Hz
-
 #define WIRE_PORT Wire  // Your desired Wire port.      Used when "USE_SPI" is not defined
 #define AD0_VAL   1     // The value of the last bit of the I2C address.
                         // On the SparkFun 9DoF IMU breakout the default is 1, and when
@@ -23,7 +19,7 @@ IMU::IMU() {
 }
 
 /*****************************************************************************-
-    imuInit()
+ *   imuInit()
  *****************************************************************************/
 void IMU::imuInit() {
   imuInit(&Serial, WIRE_PORT, AD0_VAL);
@@ -76,9 +72,9 @@ void IMU::imuInit(Stream *serialImpl, TwoWire &wirePort, uint8_t ad0_val) {
 
   // Set up Digital Low-Pass Filter configuration
   ICM_20948_dlpcfg_t myDLPcfg;            // Similar to FSS, this uses a configuration structure for the desired sensors
-  myDLPcfg.a = acc_d111bw4_n136bw;         // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
-                                          // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
-                                          // acc_d111bw4_n136bw
+//  myDLPcfg.a = acc_d111bw4_n136bw;      // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
+//  myDLPcfg.a = acc_d23bw9_n34bw4;       // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
+    myDLPcfg.a = acc_d5bw7_n8bw3;          // acc_d111bw4_n136bw
                                           // acc_d50bw4_n68bw8
                                           // acc_d23bw9_n34bw4
                                           // acc_d11bw5_n17bw
@@ -96,6 +92,9 @@ void IMU::imuInit(Stream *serialImpl, TwoWire &wirePort, uint8_t ad0_val) {
                                           // gyr_d361bw4_n376bw5
 
   imu.setDLPFcfg( (ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg );
+  imu.enableDLPF( ICM_20948_Internal_Acc, true );
+  imu.enableDLPF( ICM_20948_Internal_Gyr, true );
+
   if( imu.status != ICM_20948_Stat_Ok){
     _serialOut->print(F("setDLPcfg returned: "));
     _serialOut->println(imu.statusString());
@@ -125,47 +124,34 @@ void IMU::setSampleRate(float smplFreq) {
 }
 
 
+
 /*****************************************************************************-
  *  compFilter()  Complementary filter to get angles
  *****************************************************************************/
 void IMU::compFilter(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ) {
   static float gPitch = 0.0;
   static float gRoll = 0.0;
-  static float gYaw = 0.0;
 
-  gyroPitchDelta = -gyroY / sampleFreq; // degrees changed during period
+  // Pitch
+  gyroPitchDelta = -gyroX / sampleFreq; // degrees changed during period
   gPitch += gyroPitchDelta;   // Debugging
   gaPitch = gyroPitchDelta + gaPitch;  // used in weighting final angle
-
-  float gyroRollDelta = gyroX / sampleFreq;
-  gRoll += gyroRollDelta;
-  gaRoll = gaRoll - gyroRollDelta;
-
-  float gyroYawDelta = -gyroZ / sampleFreq; // degrees changed during period
-  gYaw += gyroYawDelta;
-
   float aPitch = ((atan2(-accelY, accelZ)) * RAD_TO_DEG);
   gaPitch = (gaPitch * GYRO_WEIGHT) + (aPitch * (1 - GYRO_WEIGHT));
 
   // Roll
-  float aRoll =  (atan2(accelY, accelZ) * RAD_TO_DEG);
+  float gyroRollDelta = gyroY / sampleFreq;
+  gRoll += gyroRollDelta;
+  gaRoll = gaRoll - gyroRollDelta;
+  float aRoll =  (atan2(accelX, accelZ) * RAD_TO_DEG);
   gaRoll = (gaRoll * GYRO_WEIGHT) + (aRoll * (1 - GYRO_WEIGHT)); // Weigh factors
+
+  // Yaw/Heading
+  float gyroYawDelta = -gyroZ / sampleFreq; // degrees changed during period
+  gHeading += gyroYawDelta;
 }
 
 
-//---------------------------------------------------------------------------------------------------
-// Fast inverse square-root
-// See: http://en.wikipedia.org/wiki/Fast_inverse_square_root
-
-float invSqrt(float x) {
-  float halfx = 0.5f * x;
-  float y = x;
-  long i = *(long*)&y;
-  i = 0x5f3759df - (i >> 1);
-  y = *(float*)&i;
-  y = y * (1.5f - (halfx * y * y));
-  return y;
-}
 
 /*****************************************************************************-
      MahonyAHRSupdateIMU()
@@ -173,19 +159,13 @@ float invSqrt(float x) {
      From: http://x-io.co.uk/open-source-imu-and-ahrs-algorithms/
 
  *****************************************************************************/
-
-
 #define twoKpDef  (2.0f * 0.5f) // 2 * proportional gain
 #define twoKiDef  (2.0f * 0.0f) // 2 * integral gain
-
-//---------------------------------------------------------------------------------------------------
-// Variable definitions
 
 volatile float twoKp = twoKpDef;                      // 2 * proportional gain (Kp)
 volatile float twoKi = twoKiDef;                      // 2 * integral gain (Ki)
 volatile float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;          // quaternion of sensor frame relative to auxiliary frame
 volatile float integralFBx = 0.0f,  integralFBy = 0.0f, integralFBz = 0.0f; // integral error terms scaled by Ki
-
 
 void MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az) {
   float recipNorm;
@@ -197,7 +177,7 @@ void MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float
   if (!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
 
     // Normalise accelerometer measurement
-    recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+    recipNorm = 1.0 / sqrt(ax * ax + ay * ay + az * az);
     ax *= recipNorm;
     ay *= recipNorm;
     az *= recipNorm;
@@ -245,7 +225,7 @@ void MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float
   q3 += (qa * gz + qb * gy - qc * gx);
 
   // Normalise quaternion
-  recipNorm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+  recipNorm = 1.0 / sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
   q[0] = q0 *= recipNorm;
   q[1] = q1 *= recipNorm;
   q[2] = q2 *= recipNorm;
@@ -259,14 +239,10 @@ void MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float
 boolean IMU::isNewImuData() {
 
   if (imu.dataReady()) {
-//    static unsigned long t1 = 0UL;
-//    unsigned long t2 = micros();
     imu.getAGMT();
-//    printScaledAGMT();   // This function takes into account the sclae settings from when the measurement was made to calculate the values with units
-
-    float accelX   = imu.accX() / 1000;  // divide to get units in g
-    float accelY   = imu.accY() / 1000;  // divide to get units in g
-    float accelZ   = imu.accZ() / 1000;  // divide to get units in g
+    accelX   = imu.accX() / 1000;  // divide to get units in g
+    accelY   = imu.accY() / 1000;  // divide to get units in g
+    accelZ   = imu.accZ() / 1000;  // divide to get units in g
 
     float gyroPitchDelta = imu.gyrX();
     float gyroXrad = gyroPitchDelta * DEG_TO_RAD;                  // radians/sec
@@ -283,8 +259,8 @@ boolean IMU::isNewImuData() {
     //    MadgwickQuaternionUpdate(accelX, accelY, accelZ, gyroXrad, gyroYrad, gyroZrad);
     MahonyAHRSupdateIMU(gyroXrad, gyroYrad, gyroZrad, accelX, accelY, accelZ);
 
-    maRollRad  = -atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
-    maPitchRad = asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
+    maPitchRad  = -atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
+    maRollRad = asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
     maYawRad   = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
     maPitch = maPitchRad * RAD_TO_DEG;
     maRoll  = maRollRad * RAD_TO_DEG;
@@ -301,6 +277,8 @@ boolean IMU::isNewImuData() {
   }
 }
 
+
+
 /*****************************************************************************-
  *  accelUpdate()  Compute vertical acceleration and horizontal speed from
  *                 the acceleration along the y/x? axis.
@@ -308,57 +286,4 @@ boolean IMU::isNewImuData() {
 void IMU::accelUpdate() {
 //  tireZAccel = (cos(gaPitch * DEG_TO_RAD) * accelZ) + (sin(gaPitch * DEG_TO_RAD) * accelY);
 //  tireYAccel = (sin(gaPitch * DEG_TO_RAD) * accelZ) + (cos(gaPitch * DEG_TO_RAD) * accelY);
-}
-
-void IMU::printFormattedFloat(float val, uint8_t leading, uint8_t decimals){
-  float aval = abs(val);
-  if(val < 0){
-    _serialOut->print("-");
-  }else{
-    _serialOut->print(" ");
-  }
-  for( uint8_t indi = 0; indi < leading; indi++ ){
-    uint32_t tenpow = 0;
-    if( indi < (leading-1) ){
-      tenpow = 1;
-    }
-    for(uint8_t c = 0; c < (leading-1-indi); c++){
-      tenpow *= 10;
-    }
-    if( aval < tenpow){
-      _serialOut->print("0");
-    }else{
-      break;
-    }
-  }
-  if(val < 0){
-    _serialOut->print(-val, decimals);
-  }else{
-    _serialOut->print(val, decimals);
-  }
-}
-
-void IMU::printScaledAGMT(){
-  _serialOut->print("Scaled. Acc (mg) [ ");
-  printFormattedFloat( imu.accX(), 5, 2 );
-  _serialOut->print(", ");
-  printFormattedFloat( imu.accY(), 5, 2 );
-  _serialOut->print(", ");
-  printFormattedFloat( imu.accZ(), 5, 2 );
-  _serialOut->print(" ], Gyr (DPS) [ ");
-  printFormattedFloat( imu.gyrX(), 5, 2 );
-  _serialOut->print(", ");
-  printFormattedFloat( imu.gyrY(), 5, 2 );
-  _serialOut->print(", ");
-  printFormattedFloat( imu.gyrZ(), 5, 2 );
-  _serialOut->print(" ], Mag (uT) [ ");
-  printFormattedFloat( imu.magX(), 5, 2 );
-  _serialOut->print(", ");
-  printFormattedFloat( imu.magY(), 5, 2 );
-  _serialOut->print(", ");
-  printFormattedFloat( imu.magZ(), 5, 2 );
-  _serialOut->print(" ], Tmp (C) [ ");
-  printFormattedFloat( imu.temp(), 5, 2 );
-  _serialOut->print(" ]");
-  _serialOut->println();
 }

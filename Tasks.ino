@@ -51,7 +51,6 @@ void setRunningState() {
     if (isRunReady) currentBlink = FastFlash;
     else currentBlink = SlowFlash;
   }
-//  Serial.print(isRunning); Serial.print(" "); Serial.println(isRunning);
 }
 
 
@@ -65,30 +64,29 @@ void blinkLed() {
 
   if (timeMilliseconds > trigger) {
     trigger = timeMilliseconds + 100;
-    bool buState, gnState;
+    bool buState;
 
     blinkCount++;
     switch (currentBlink) {
       case SlowFlash:
         buState = ((blinkCount % 10) == 0);
-        gnState = ((blinkCount % 10) == 1);
         break;
       case FastFlash:
-        gnState = buState = ((blinkCount % 2) == 0);
+        buState = ((blinkCount % 2) == 0);
         break;
       case SlowBlink:
-        gnState = buState = (((blinkCount / 5) % 2) == 0);
+        buState = (((blinkCount / 5) % 2) == 0);
         break;
       case On:
-        buState = gnState = true;
+        buState = true;
         break;
       case Off:
       default:
-        buState = gnState = false;
+        buState = false;
         break;
     }
     analogWrite(LED_BU_PIN, buState ? 80 : 0);
-    analogWrite(LED_GN_PIN, gnState ? 50 : 0);
+
 //    digitalWrite(LED_BU_PIN, buState ? HIGH : LOW);
 //    digitalWrite(LED_GN_PIN, gnState ? HIGH : LOW);
   }
@@ -159,10 +157,14 @@ void checkLogDump() {
   while (Serial.available() > 0) {
     char c = Serial.read();
     if (c == 'd') {
-      Serial.println(logHeader);
-      int end = (isLogWrap) ? N_LOGS : logCount;
+      int end = (isLogStrWrap) ? N_STR_LOGS : logStrCount;
       for (int i = 0; i < end; i++) {
-        sprintf(message, "%12.2f,%9.2f,%9.2f,%9.2f", 
+        Serial.println(logStrs[i]);
+      }
+      Serial.println(logHeader);
+      end = (isLogFloatWrap) ? N_FLOAT_LOGS : logFloatCount;
+      for (int i = 0; i < end; i++) {
+        sprintf(message, "%12.3f,%9.3f,%9.3f,%9.2f", 
                 logFloats[0][i],
                 logFloats[1][i],
                 logFloats[2][i],
@@ -179,14 +181,21 @@ void checkLogDump() {
  * log()
  *****************************************************************************/
 void log(float a, float b, float c, float d) {
-  logFloats[0][logCount] = a;
-  logFloats[1][logCount] = b;
-  logFloats[2][logCount] = c;
-  logFloats[3][logCount] = d;
-  logCount++;
-  if (logCount >= N_LOGS) {
-    logCount = 0;
-    isLogWrap = true;
+  logFloats[0][logFloatCount] = a;
+  logFloats[1][logFloatCount] = b;
+  logFloats[2][logFloatCount] = c;
+  logFloats[3][logFloatCount] = d;
+  logFloatCount++;
+  if (logFloatCount >= N_FLOAT_LOGS) {
+    logFloatCount = 0;
+    isLogFloatWrap = true;
+  }
+}
+void log(String s) {
+  logStrs[logStrCount] = s;
+  if (logStrCount >= N_STR_LOGS) {
+    logStrCount = 0;
+    isLogStrWrap = true;
   }
 }
 
@@ -200,9 +209,6 @@ void switches() {
   static unsigned int timerBu = 0;
   static boolean buState = false;
   static boolean oldBuState = false;
-  static unsigned int timerGn = 0;
-  static boolean gnState = false;
-  static boolean oldGnState = false;
 
   // Debounce blue switch 
   boolean swState = digitalRead(SW_BU_PIN) == LOW;
@@ -213,19 +219,43 @@ void switches() {
     isRunReady = !isRunReady;
   }
   oldBuState = buState;
-
-  // Debounce green switch 
-  swState = digitalRead(SW_GN_PIN) == LOW;
-  if (swState) timerGn = timeMilliseconds;
-  if ((timeMilliseconds - timerGn) > 50) gnState = false;
-  else gnState = true;
-  if (gnState && (!oldGnState)) {  // Green Switch press transition?
-    isRunReady = !isRunReady;
-  }
-  oldGnState = gnState;
 }
 
 
+
+/*****************************************************************************-
+ *  updateCartesian() Update the cartesian coordinates given the new
+ *                    readings from the gyro.  Does not use AHRS. 
+ *                    assumes measurements relative to the robot rather
+ *                    than 3d space.
+ *****************************************************************************/
+void updateCartesian() {
+  static int oldTickPosition = 0;
+
+//  compute the Center of Oscillation Tick Position
+//  coTickPosition = tickPosition - ((long) (sin(gaPitch * DEG_TO_RAD) * 4000.0));
+
+  // Compute the new xy position
+  double dist = ((double) (tickPosition - oldTickPosition)) / TICKS_PER_METER;
+  oldTickPosition = tickPosition;
+  currentLoc.x += sin(imu.gHeading * DEG_TO_RAD) * dist;
+  currentLoc.y += cos(imu.gHeading * DEG_TO_RAD) * dist;
+}
+
+void setHeading(float heading) {
+  imu.gHeading = heading;
+}
+
+
+
+/**************************************************************************.
+ *  rangeAngle() Set angle value between -180 and +180
+ **************************************************************************/
+float rangeAngle(float angle) {
+  while (angle > 180.0) angle -= 360.0;
+  while (angle <= -180.0) angle += 360.0;
+  return angle;
+}
 
 
 
@@ -259,8 +289,9 @@ const int RC_MID = (RC_RANGE / 2) + RC_MIN ;
 void ch1Isr() {
   static unsigned long riseTime = 0UL;
   unsigned long t = micros();
-  if (digitalReadFast(CH1_RADIO_PIN)) riseTime = t;
-  else {
+  if (digitalReadFast(CH1_RADIO_PIN)) {
+    riseTime = t;
+  } else {
     int ch1pw = t - riseTime;
     controllerX = ( 2.0 * ((float) (ch1pw - RC_MID))) / RC_RANGE;
   }
@@ -268,8 +299,9 @@ void ch1Isr() {
 void ch2Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
-  if (digitalReadFast(CH2_RADIO_PIN)) riseTime = t;
-  else  {
+  if (digitalReadFast(CH2_RADIO_PIN)) {
+    riseTime = t;
+  } else  {
     int ch2pw = t - riseTime;
     controllerY = ( 2.0 * ((float) (ch2pw - RC_MID))) / RC_RANGE;
   }
@@ -277,8 +309,9 @@ void ch2Isr() {
 void ch3Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
-  if (digitalReadFast(CH3_RADIO_PIN)) riseTime = t;
-  else {
+  if (digitalReadFast(CH3_RADIO_PIN)) {
+    riseTime = t;
+  } else {
     int ch3pw = t - riseTime;
     ch3State = (ch3pw < 1500) ? false : true;
   }
@@ -286,8 +319,9 @@ void ch3Isr() {
 void ch4Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
-  if (digitalReadFast(CH4_RADIO_PIN)) riseTime = t;
-  else {
+  if (digitalReadFast(CH4_RADIO_PIN)) {
+    riseTime = t;
+  } else {
     int ch4pw = t - riseTime;
     if (ch4pw < 1200) ch4State = 0;
     else if (ch4pw < 1800) ch4State = 1;
@@ -297,8 +331,9 @@ void ch4Isr() {
 void ch5Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
-  if (digitalReadFast(CH5_RADIO_PIN)) riseTime = t;
-  else {
+  if (digitalReadFast(CH5_RADIO_PIN)) {
+    riseTime = t;
+  } else {
     int ch5pw = t - riseTime;
     ch5Val = ( 2.0 * ((float) (ch5pw - RC_MID))) / RC_RANGE;
     if (ch5Val < -0.8) ch5State = 0;
@@ -311,8 +346,9 @@ void ch5Isr() {
 void ch6Isr() {
   static unsigned long riseTime = 0UL;
   unsigned int t = micros();
-  if (digitalReadFast(CH6_RADIO_PIN)) riseTime = t;
-  else {
+  if (digitalReadFast(CH6_RADIO_PIN)) {
+    riseTime = t;
+  } else {
     int ch6pw = t - riseTime;
     ch6Val = ( 2.0 * ((float) (ch6pw - RC_MID))) / RC_RANGE;
   }

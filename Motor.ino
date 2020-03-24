@@ -144,6 +144,8 @@ void runMotors() {
   runMotorRight();
   runMotorLeft();
   wKph = (wKphLeft + wKphRight) / 2.0;
+  tickPosition = tickPositionRight + tickPositionLeft;
+  tickMeters = tickPosition / (TICKS_PER_METER * 2.0);
 }
 
 
@@ -183,16 +185,18 @@ void runMotorLeft() {
  ******************************************************************************/
 void setMotorRight(int pw, bool isFwd) {
   if (!isRunning) pw = 0;
-  if (pw > 255) pw = 255;
+  else if (pw > 255) pw = 255;
   else if (pw < 0) pw = 0;
   digitalWrite(DIR_RIGHT_PIN, (isFwd) ? LOW : HIGH);
-  analogWrite(PWM_RIGHT_PIN, pw);
+  analogWrite(PWM_RIGHT_PIN, pw);\
+  motorRightPw = pw;  // For panic
 }
 
 void setMotorLeft(int pw, bool isFwd) {
   if (!isRunning) pw = 0;
-  if (pw > 255) pw = 255;
+  else if (pw > 255) pw = 255;
   else if (pw < 0) pw = 0;
   digitalWrite(DIR_LEFT_PIN, (isFwd) ? HIGH : LOW);
   analogWrite(PWM_LEFT_PIN, pw);
+  motorLeftPw = pw;
 }

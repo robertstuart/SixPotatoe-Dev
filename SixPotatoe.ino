@@ -1,7 +1,6 @@
 /*****************************************************************************-
  *                            SixPotatoe.ino
  *****************************************************************************/
-#include <vector>
 #include <Wire.h>
 #include "IMU.h"
 
@@ -13,11 +12,15 @@ const bool IS_TEST4 = false;  // Set to be true for the 4th system test.
 
 // System constants
 //const float GYRO_WEIGHT = 0.997;
-const float WHEEL_DIA_MM = 125.0;
-const float TICKS_PER_ROTATION = 329.5;
+const float WHEEL_DIA_MM = 120.6;
+//const float TICKS_PER_ROTATION = 329.5;  // 612 RPM motor
+const float TICKS_PER_ROTATION = 460.8;  // 437 RPM motor
+const float TICKS_PER_METER = (1000.0 / (M_PI * WHEEL_DIA_MM)) * TICKS_PER_ROTATION;
 const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
-const float KPH_TO_PW = 8.1;
-const float MAX_KPH = 22.0;  // Maximum target for controller
+//const float KPH_TO_PW = 8.1;  // 612 RPM motor
+const float KPH_TO_PW = 12.4;  // 437 RPM motor
+// const float MAX_KPH = 22.0;  // Maximum target for controller, 612 RPM
+const float MAX_KPH = 16.0;  // Maximum target for controller, 437 RPM
 
 /*****************************************************************************-
  *  Pin definitions
@@ -40,24 +43,21 @@ const int CH5_RADIO_PIN   =  6;
 const int CH6_RADIO_PIN   =  7;
 
 const int LED_PIN         = 13;
-const int LED_GN_PIN      = 12;
-const int LED_BU_PIN      = 11;
-
-const int SW_BU_PIN       = 10;
-const int SW_GN_PIN       =  9;
+const int LED_BU_PIN      = 12;
+const int SW_BU_PIN       = 11;
+const int WATCHDOG_PIN    =  8;
 
 // Tunable variables
-float CONST_COKPH_ROTATION = 2.1;
-float CONST_COKPH_TC = 0.05; // 1.0 passes all hf, near zero passes only low freq.
-float valSetV = 2.7;
-float CONST_ACCEL_LPF = 0.95;  
-//float CONST_ACCEL_PITCH = x.x;   // Cancel out acceleration from gPitch
+float K1 = 1.6;
+float K2 = 0.05; // 1.0 passes all hf, near zero passes only low freq.
+float CONST_ACCEL_LPF = 0.9;  
 float CONST_ERROR_TO_ANGLE = 2.0;
 float CONST_ANGLE_TO_KPH = 0.2;
-float ACCEL_PITCH_OFFSET = 1.4;   // pitch offset
-float MOTOR_GAIN = 3.0;
+float K10 = 1.4;   // accelerometer pitch offset
+float MOTOR_GAIN = 4.0;
 float K12 = 50.0;   // +- constraint on target pitch
-float K13 = 35.0;   // +- constraint on pitch error to prevent too rapid righting
+//float K13 = 30.0;   // +- constraint on pitch error to prevent too rapid righting
+float K13 = 20.0;   // +- constraint on pitch error to prevent too rapid righting
 int   K14 = 500;    // ms to get back up again after fall
 float K15 = 70;     // pitch beyond which is considered to not be upright
 int   K16 = 500;    // ms after fall to stay down
@@ -72,10 +72,14 @@ enum BlinkState {
 
 BlinkState currentBlink = Off;
 
-#define N_LOGS 15000  // 15k near max before running out of memory
-float logFloats[4][N_LOGS];
-int logCount = 0;
-boolean isLogWrap = false;
+#define N_FLOAT_LOGS 15000  // 15k near max before running out of memory
+#define N_STR_LOGS 100  // 15k near max before running out of memory
+float logFloats[4][N_FLOAT_LOGS];
+String logStrs[N_STR_LOGS];
+int logFloatCount = 0;
+boolean isLogFloatWrap = false;
+int logStrCount = 0;
+boolean isLogStrWrap = false;
 String logHeader = "No Header";
 
 // Motor varialbles
@@ -94,25 +98,31 @@ float targetWKphRight = 0.0;
 float motorTargetKphRight = 0.0;
 float targetWKphLeft = 0.0;
 float motorTargetKphLeft = 0.0;
+int motorRightPw = 0;
+int motorLeftPw = 0;
+
 // Run variables
 float rotation = 0.0;
 float coKph = 0.0;
 float coKphOld = 0.0;
 float targetCoKph = 0.0;
 float targetWKph = 0.0;
-boolean isStartGetUp = false;
-boolean isGettingUp = false;
+bool isStartGetUp = false;
+bool isGotUp = false;
+bool isGettingUp = false;
 
 unsigned long timeMilliseconds = 0UL;
 unsigned long timeMicroseconds = 0UL;
 bool isRunning = false;
 bool isRunReady = false;
 bool isUpright = false;
+bool isPanic = false;
 
 //int bCount = 0;
 //unsigned long upStatTime = 0UL;
 
 long tickPosition = 0L;
+double tickMeters = 0.0;
 double coTickPosition = 0.0;
 
 
@@ -133,6 +143,35 @@ int dBuffPtr = 0;
 boolean isDBuffFull = false;
 String dBuff[DBUFF_SIZE];
 
+// Nav public variables
+struct loc {
+  double x;
+  double y;
+};
+struct loc currentLoc;
+struct loc targetLoc;
+struct loc pivotLoc;
+struct loc hugStartLoc;
+struct loc coSetLoc;
+unsigned long timeRun = 0;
+unsigned long timeStart = 0;
+char routeCurrentAction = 0;
+int routeStepPtr = 0;
+boolean isStartReceived = false;
+boolean isRouteInProgress = false;
+float routeKph = 0.0;
+float decelKph = 0.0;
+boolean isDecelActive = false;
+boolean isDecelPhase = false;
+float routeScriptKph = 0.0;
+boolean isLockStand = false;
+String routeTitle = "";
+boolean isRightTurn = true;
+float turnRadius = 0.0;
+float endTangentDegrees = 0.0;
+float pivotBearing = 0.0;
+float tpKph = 0.0;
+
 IMU imu;
 
 /*****************************************************************************_
@@ -145,13 +184,12 @@ void setup() {
   // Motor pins are initialized in motorInit()
   pinMode(LED_PIN, OUTPUT);
   pinMode(LED_BU_PIN, OUTPUT);
-  pinMode(LED_GN_PIN, OUTPUT);
+  pinMode(WATCHDOG_PIN, OUTPUT);
   pinMode(SW_BU_PIN, INPUT_PULLUP);
-  pinMode(SW_GN_PIN, INPUT_PULLUP);
     
   digitalWrite(LED_PIN, HIGH);
+  digitalWrite(WATCHDOG_PIN, LOW);
   digitalWrite(LED_BU_PIN, LOW);
-  digitalWrite(LED_GN_PIN, LOW);
 
   rcInit(); 
   imu.imuInit(&Serial, Wire, 1);
@@ -163,6 +201,7 @@ void setup() {
 //    sprintf(message, "%3d,%6.2f,%7.3f", i, sin((float) i), cos((float) i)); 
 //    log();
 //  }
+
 }
 
 
@@ -189,7 +228,9 @@ void systemTest1() {
   static unsigned long lastT = 0;
   if (imu.isNewImuData()) {
     unsigned long newT = millis();
-    sprintf(message, "%2d ms   %7.2f degrees", ((int) (newT - lastT)), imu.maPitch);
+    sprintf(message, 
+            "Pitch:%6.2f   Roll:%6.2f   Yaw:%6.2f   Period:%2d ms", 
+            imu.maPitch, imu.maRoll, imu.maYaw, ((int) (newT - lastT)));
     Serial.println(message);
     lastT = newT;
     blink13();
@@ -210,13 +251,14 @@ void systemTest2() {
     blink13();
   }
 }
-// Check motor controlers
+// Check motor controlers and encoders
 void systemTest3() {
   while (true) {
     commonTasks();
     if (imu.isNewImuData()) {
       int x = (int) (controllerX * 20.0);
-      int y = (int) (controllerY * 100.0);
+//      int y = (int) (controllerY * 100.0);
+      int y = (int) (controllerY * 255.0);
       int r = y + x;
       int l = y - x;
       setMotorRight(abs(r), r > 0);
@@ -225,6 +267,7 @@ void systemTest3() {
       readSpeedLeft();
       sprintf(message, "%7.2f %7.2f %5d %5d %5d", wKphRight, wKphLeft, r, l, isRunning);
       Serial.println(message);
+      blink13();
     }
   }
 }
@@ -240,6 +283,7 @@ void systemTest4() {
       runMotors();
       sprintf(message, "%7.2f %7.2f %7.2f %7.2f %5d", wKphRight, wKphLeft, x, y, isRunning);
       Serial.println(message);
+      blink13();
     }
   }
 }
