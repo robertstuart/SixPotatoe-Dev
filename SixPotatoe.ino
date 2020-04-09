@@ -3,6 +3,7 @@
  *****************************************************************************/
 #include <Wire.h>
 #include "IMU.h"
+#include "Routes.h"
 
 // Test defines
 const bool IS_TEST1 = false;  // Set to be true for the 1st system test.
@@ -19,8 +20,6 @@ const float TICKS_PER_METER = (1000.0 / (M_PI * WHEEL_DIA_MM)) * TICKS_PER_ROTAT
 const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
 //const float KPH_TO_PW = 8.1;  // 612 RPM motor
 const float KPH_TO_PW = 12.4;  // 437 RPM motor
-// const float MAX_KPH = 22.0;  // Maximum target for controller, 612 RPM
-const float MAX_KPH = 16.0;  // Maximum target for controller, 437 RPM
 
 /*****************************************************************************-
  *  Pin definitions
@@ -48,29 +47,37 @@ const int SW_BU_PIN       = 11;
 const int WATCHDOG_PIN    =  8;
 
 // Tunable variables
-float K1 = 1.6;
-float K2 = 0.05; // 1.0 passes all hf, near zero passes only low freq.
-float CONST_ACCEL_LPF = 0.9;  
-float CONST_ERROR_TO_ANGLE = 2.0;
-float CONST_ANGLE_TO_KPH = 0.2;
-float K10 = 1.4;   // accelerometer pitch offset
-float MOTOR_GAIN = 4.0;
-float K12 = 50.0;   // +- constraint on target pitch
+// const float MAX_BALANCE_KPH = 22.0;  // Maximum target for controller, 612 RPM
+const float MAX_BALANCE_KPH = 16.0;  // Maximum target for controller, 437 RPM
+const float MAX_GROUND_KPH = 5.0;
+const float MAX_GROUND_STEER = 2.0;
+const float K1 = 1.6;
+const float K2 = 0.05; // 1.0 passes all hf, near zero passes only low freq.
+const float CONST_ACCEL_LPF = 0.9;  
+const float CONST_ERROR_TO_ANGLE = 2.0;
+////const float CONST_ANGLE_TO_KPH = 0.2;
+//const float CONST_ANGLE_TO_KPH = 0.15;
+const float K10 = 1.4;   // accelerometer pitch offset
+const float MOTOR_GAIN = 4.0;
+const float K12 = 50.0;   // +- constraint on target pitch
 //float K13 = 30.0;   // +- constraint on pitch error to prevent too rapid righting
-float K13 = 20.0;   // +- constraint on pitch error to prevent too rapid righting
-int   K14 = 500;    // ms to get back up again after fall
-float K15 = 70;     // pitch beyond which is considered to not be upright
-int   K16 = 500;    // ms after fall to stay down
+const float K13 = 20.0;   // +- constraint on pitch error to prevent too rapid righting
+const float K14 = 0.15;    // Angle error to pitch
+const float K15 = 70;     // pitch beyond which is considered to not be upright
+const int   K16 = 50;    // ms time for pitch < K16 to be not upright
+const int   K20 = 80;     // LED brightness, 0-255;
+const float K21 = 0.95;
+const float ACCEL_TO_KPH = 0.213;
 
 enum BlinkState {
-  Off,
-  SlowFlash,
-  FastFlash,
-  SlowBlink,
-  On
+  BLINK_OFF,        //  motors off, no route
+  BLINK_ON,         //  motors on,  no route 
+  BLINK_SLOW_FLASH, //  motors off, running route
+  BLINK_SLOW,       //  motors on,  running route
+  BLINK_FAST_FLASH  //  motors on,  fallen
 };
 
-BlinkState currentBlink = Off;
+BlinkState currentBlink = BLINK_OFF;
 
 #define N_FLOAT_LOGS 15000  // 15k near max before running out of memory
 #define N_STR_LOGS 100  // 15k near max before running out of memory
@@ -102,21 +109,19 @@ int motorRightPw = 0;
 int motorLeftPw = 0;
 
 // Run variables
-float rotation = 0.0;
 float coKph = 0.0;
-float coKphOld = 0.0;
-float targetCoKph = 0.0;
+float balanceTargetKph = 0.0;
+float balanceSteerAdjustment = 0.0;
 float targetWKph = 0.0;
-bool isStartGetUp = false;
-bool isGotUp = false;
-bool isGettingUp = false;
 
 unsigned long timeMilliseconds = 0UL;
 unsigned long timeMicroseconds = 0UL;
 bool isRunning = false;
 bool isRunReady = false;
+bool isBalancing = true;
 bool isUpright = false;
-bool isPanic = false;
+bool isZeroG = false;
+//bool isPanic = false;
 
 //int bCount = 0;
 //unsigned long upStatTime = 0UL;
@@ -137,7 +142,6 @@ volatile float ch5Val = 0.0;        // ch5 top left potentiometer
 volatile int ch5State = 0;
 volatile float ch6Val = 0.0;        // ch6 top right potentiometer.
 
-char message[200] = "";
 #define DBUFF_SIZE 10000
 int dBuffPtr = 0;
 boolean isDBuffFull = false;
@@ -160,17 +164,34 @@ int routeStepPtr = 0;
 boolean isStartReceived = false;
 boolean isRouteInProgress = false;
 float routeKph = 0.0;
-float decelKph = 0.0;
-boolean isDecelActive = false;
-boolean isDecelPhase = false;
-float routeScriptKph = 0.0;
-boolean isLockStand = false;
 String routeTitle = "";
-boolean isRightTurn = true;
 float turnRadius = 0.0;
-float endTangentDegrees = 0.0;
-float pivotBearing = 0.0;
-float tpKph = 0.0;
+//float tpKph = 0.0;
+
+// Route & Nav 
+boolean isLoadedRouteValid = true;
+String *currentRoute = go;
+float getupSpeed = 0.0;
+const float STEP_ERROR = -42.42;
+int originalStepStringPtr = 0;
+String stepString = "";
+int numLen = 0;
+double dDiff = 0.0D;
+float targetBearing = 0.0;
+float targetDistance = 0.0;
+float targetRunDistance = 0.0;
+float startTurnBearing = 0.0;
+float currentRotation = 0.0;
+float stepRotation = 0.0;
+double stepDistance = 0.0D;
+double currentDistance = 0.0D;
+double startOrientation = 0.0;
+struct loc startLoc;
+bool isGettingUp = false;
+int getUpTime = 0;
+unsigned long getUpEndTime = 0UL;
+float getUpSpeed = 0.0;
+
 
 IMU imu;
 
@@ -195,13 +216,6 @@ void setup() {
   imu.imuInit(&Serial, Wire, 1);
   motorInit();
   delay(100); // For switches?
-
-  
-//  for (int i = 0; i < 200; i++) {
-//    sprintf(message, "%3d,%6.2f,%7.3f", i, sin((float) i), cos((float) i)); 
-//    log();
-//  }
-
 }
 
 
@@ -228,10 +242,9 @@ void systemTest1() {
   static unsigned long lastT = 0;
   if (imu.isNewImuData()) {
     unsigned long newT = millis();
-    sprintf(message, 
+    Serial.printf(
             "Pitch:%6.2f   Roll:%6.2f   Yaw:%6.2f   Period:%2d ms", 
             imu.maPitch, imu.maRoll, imu.maYaw, ((int) (newT - lastT)));
-    Serial.println(message);
     lastT = newT;
     blink13();
   }
@@ -243,10 +256,8 @@ void systemTest2() {
   if (imu.isNewImuData()) {
     if ((m++ % 10) == 0) { 
       digitalWrite(LED_PIN, (toggle = !toggle) ? HIGH : LOW);
-      sprintf(message, 
-              "ch1:%5.2f     ch2:%5.2f     ch3:%1d     ch4:%1d     ch5:%5.2f      ch6:%5.2f", 
-              controllerX, controllerY, ch3State, ch4State, ch5Val, ch6Val);
-      Serial.println(message);
+      Serial.printf("ch1:%5.2f     ch2:%5.2f     ch3:%1d     ch4:%1d     ch5:%5.2f   ch5St5ate:%1d    ch6:%5.2f\n", 
+                    controllerX, controllerY, ch3State, ch4State, ch5Val, ch5State, ch6Val);
     }
     blink13();
   }
@@ -265,8 +276,7 @@ void systemTest3() {
       setMotorLeft(abs(l), l > 0);
       readSpeedRight();
       readSpeedLeft();
-      sprintf(message, "%7.2f %7.2f %5d %5d %5d", wKphRight, wKphLeft, r, l, isRunning);
-      Serial.println(message);
+      Serial.printf("%7.2f %7.2f %5d %5d %5d\n", wKphRight, wKphLeft, r, l, isRunning);
       blink13();
     }
   }
@@ -281,8 +291,7 @@ void systemTest4() {
       targetWKphRight = y + x;
       targetWKphLeft = y - x;
       runMotors();
-      sprintf(message, "%7.2f %7.2f %7.2f %7.2f %5d", wKphRight, wKphLeft, x, y, isRunning);
-      Serial.println(message);
+      Serial.printf("%7.2f %7.2f %7.2f %7.2f %5d\n", wKphRight, wKphLeft, x, y, isRunning);
       blink13();
     }
   }

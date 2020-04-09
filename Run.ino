@@ -1,13 +1,7 @@
 /*****************************************************************************-
  *                           Run.ino 
  *****************************************************************************/
-//double accelFps = 0.0;
-//double coAccelFps = 0.0;
-//double lpfAccelFps = 0.0;
-//double lpfTpFps = 0.0;
 float kphCorrection = 0.0f;
-//float kphLpfCorrectionOld = 0.0;
-//float kphLpfCorrection = 0.0;
 float angleError = 0.0;
 float targetPitch = 0.0;
 float kphAdjustment = 0.0;
@@ -17,38 +11,47 @@ float kphAdjustment = 0.0;
  *  run() Continuous loop for doing all tasks.
  *****************************************************************************/
 void run() {
-  while(true) { // main loop
     commonTasks();
-    if (imu.isNewImuData()) { 
-      updateCartesian();
-      if (isGettingUp) gettingUp(false);
-      else balance(); 
+    if (imu.isNewImuData()) {
+      if (isRouteInProgress) routeControl(); 
+      else manualControl();
+      if (isBalancing) balance();
       runMotors();
       blink13();
       watchdog();
-    } 
-  }
+      postLog();
+      updateCartesian();
+    }
+}
+
+
+
+/*****************************************************************************-
+ *  manualControl() Control speed & steering from RC
+ *****************************************************************************/
+void manualControl() {
+  // Set values for balancing
+  balanceTargetKph = controllerY * MAX_BALANCE_KPH;
+  float yfac = (((1.0 - abs(controllerY)) * 01.5) + 0.5) * 2.0; //wKph rather than controllerY?
+  balanceSteerAdjustment = -yfac * controllerX; 
+  
+  // Set values for on the ground
+  float targetWKph = controllerY * MAX_GROUND_KPH;
+  float steerDiff = controllerX * MAX_GROUND_STEER;
+  targetWKphRight = targetWKph + steerDiff;
+  targetWKphLeft = targetWKph - steerDiff;
 }
 
 
 
 /*****************************************************************************-
  *  balance() 
- ***********************************************************************/
+ *****************************************************************************/
 void balance() {
-  // Compute Center of Oscillation speed (cos)
-  float delta = imu.gyroPitchDelta * cos(DEG_TO_RAD * imu.maPitch); // account for pitch
-  rotation = delta * K1;  // ~1.6
-  coKph = wKph - rotation;
-  // 0.92?, 1.0 = no hf filtering, small values give slow response
-  coKph = (coKphOld * (1 - K2)) + (coKph * K2);
-  coKphOld = coKph;
-
-  // Get the controller target speed.
-  targetCoKph = (isRouteInProgress) ? routeKph : controllerY * MAX_KPH;
+  coKph = getCoKph();
 
   // Find the speed error.  Constrain rate of change?
-  float coKphError = targetCoKph - coKph;
+  float coKphError = balanceTargetKph - coKph;
 
   // compute a weighted angle to eventually correct the speed error
   targetPitch = -(coKphError * CONST_ERROR_TO_ANGLE); //** 4.0 ******** Speed error to angle *******************
@@ -59,58 +62,63 @@ void balance() {
   // Compute angle error and weight factor
   angleError = targetPitch - imu.maPitch;
   angleError = constrain(angleError, -K13, K13); // prevent "jumping"
-  kphCorrection = angleError * CONST_ANGLE_TO_KPH; // 0.4 ******************* Angle error to speed *******************
-//  kphCorrection += imu.gyroPitchDelta *  0.2; // add "D" to reduce overshoot
+  kphCorrection = angleError * K14; // Angle error to speed 
+  float d = imu.gyroPitchDelta *  0.1; // add "D" to reduce overshoot
+  kphCorrection -= d;
 
   // Add the angle error to the base speed to get the target wheel speed.
   targetWKph = kphCorrection + coKph;
 
-  if (isRouteInProgress) steerRoute(); else steerRC();
+  targetWKphRight = targetWKph - balanceSteerAdjustment;
+  targetWKphLeft = targetWKph + balanceSteerAdjustment;
 
-  static bool isLogging = false;
-  static unsigned long endLogT = 0UL;
-  if (isGotUp || isLogging) {
-    logHeader = "maPitch, kphCorrection, gyroPitchDelta, coKph";
-    log(imu.maPitch, kphCorrection, imu.gyroPitchDelta, coKph);
-    if (isGotUp) {
-      isGotUp = false;
-      endLogT = timeMilliseconds + 1500;
-      isLogging = true;
-    } else {
-      if (timeMilliseconds > endLogT) {
-        isLogging = false;
-      }
-    }
-  }
 } // end balance() 
 
 
 
 /*****************************************************************************-
- *  steerRC()
+ *  getCoKPh() Return center of oscillation speed (cos) which is determined 
+ *             by accelerometer and/or wheel speed.
  *****************************************************************************/
-//void steerRC() {
-////float k = 0.2;
-////targetWKphRight = targetWKph * (1.0 + k);
-////targetWKphLeft = targetWKph * (1.0 - k);;
-//
-//  float diff = (0.75 * controllerX)/ (1.0 - controllerX);
-//  float radius = 0.15 / diff;
-//  float maxRadius = (coKph * coKph)/125;
-//  float maxDiff = 0.15 / maxRadius;
-////  if (abs(diff) > maxDiff) {
-////    if (coKph > 0.0) diff = maxDiff;
-////    else diff = -maxDiff;
-////  }
-//  targetWKphRight = targetWKph * (1.0 + diff);
-//  targetWKphLeft = targetWKph * (1.0 - diff);
-//}
+float getCoKph() {
+  static float wheelCoKphOld = 0.0;
+  static float accelCoKph = 0.0;
+  static const int COS_BUF_SIZE = 20;
+  static float cosBuff[COS_BUF_SIZE];
+  static int cosBuffPtr = 0;
+  static float fallingCoKph;
 
-void steerRC() {
-  float yfac = (((1.0 - abs(controllerY)) * 01.5) + 0.5) * 2.0;
-  kphAdjustment = -yfac * controllerX; 
-  targetWKphRight = targetWKph - kphAdjustment;
-  targetWKphLeft = targetWKph + kphAdjustment;
+  float vertAccel = (cos(imu.maPitch * DEG_TO_RAD) * imu.accelZ) + (sin(imu.maPitch * DEG_TO_RAD) * imu.accelY);
+  float horAccel = (sin(imu.maPitch * DEG_TO_RAD) * imu.accelZ) + (cos(imu.maPitch * DEG_TO_RAD) * imu.accelY);
+
+  if (vertAccel > 0.5) {
+    
+    // Compute cos using wheel speed.
+    float delta = imu.gyroPitchDelta * cos(DEG_TO_RAD * imu.maPitch);
+    float rotation = delta * K1;  // ~1.6
+    float wheelCoKph = wKph - rotation;
+    wheelCoKph = (wheelCoKphOld * (1 - K2)) + (wheelCoKph * K2); // 0.92?, 
+    wheelCoKphOld = wheelCoKph;
+
+    // Compute cos using accelerometer
+    accelCoKph -= (horAccel * ACCEL_TO_KPH);
+    if (vertAccel > 0.8) {
+      accelCoKph = (accelCoKph * K21) + (wheelCoKph * (1 - K21));
+    }
+
+    float cos = wheelCoKph; // Change to accelCoKph if using acceleromenter.
+    if (vertAccel > 0.8) {
+      fallingCoKph = cosBuff[cosBuffPtr]; // In case falling on next loop.
+      cosBuffPtr = ++cosBuffPtr % COS_BUF_SIZE; 
+      cosBuff[cosBuffPtr] = cos;
+    }
+    
+//  if (isRunning) log(imu.maPitch, vertAccel, cos, 1.0);
+    return cos; 
+  } else {
+  if (isRunning) log(imu.maPitch, vertAccel, fallingCoKph, 0.0);
+    return fallingCoKph;
+  }
 }
 
 
@@ -121,49 +129,19 @@ void steerRC() {
 void watchdog() {
   static bool toggle = false;
   toggle = !toggle;
-//  if (ch6Val > 0.0) {
-    digitalWrite(WATCHDOG_PIN, toggle ? LOW : HIGH);
-//  }
+  digitalWrite(WATCHDOG_PIN, toggle ? LOW : HIGH);
 }
 
 
 
 /*****************************************************************************-
- *  gettingUp()
+ *  postLog() Called 200 times/sec.
  *****************************************************************************/
-void gettingUp(bool reset) {
-  static unsigned long gettingUpStartTime = 0UL;
-  if (reset) {
-    if(!isUpright) {
-      isGotUp = true;
-      isRunReady = true;
-      isGettingUp = true;
-      gettingUpStartTime = timeMilliseconds;
-    }
-  } else {
-    if ((gettingUpStartTime + 50) > timeMilliseconds) {
-      float tKph = -3.0; // Go backwards at start.
-      if (imu.maPitch > 0.0) tKph = -tKph;
-      targetWKphRight = targetWKphLeft = tKph;
-    } else {
-      isGettingUp = false;
-    }
-  }
-}
-
-
-
-/*****************************************************************************-
- *  sendLog() Called 200 times/sec.
- *      Set modcount to 1 to log every loop. Set to 100 to log 
- *      every 1/2 sec, etc.
- ***********************************************************************/
-void sendLog() {
-  static unsigned int modCount = 1;
+void postLog() {
   static unsigned int logLoop = 0;
   logLoop++;
-
-  if ((modCount % 1) == 0) {
-    // logging code here.
+  if ((logLoop % 1) == 0) { // 1 = every loop, 2 = every other loop, mod3 = every 3rd loop, etc.
+//    if (isRunReady)
+//      log(imu.accelY, imu.horizAccel, imu.horizSpeed/-4.7, wKph);
   }
 }

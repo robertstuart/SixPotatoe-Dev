@@ -24,6 +24,7 @@ private:
   float maRollRad = 0.0;
   float maYawRad = 0.0;
 
+
 protected:
 
 public:
@@ -46,6 +47,11 @@ public:
   float accelX = 0.0;  
   float accelY = 0.0; 
   float accelZ = 0.0;
+
+  float vertAccel = 0.0;
+  float horizAccel = 0.0;
+  float horizSpeed = 0.0;
+
 };
 
 #endif /* _IMU_H_ */

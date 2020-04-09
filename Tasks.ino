@@ -12,6 +12,7 @@ void commonTasks() {
   blinkLed();
   switches();
   checkUpright();
+  checkController();
   setRunningState();
   checkLogDump();
 }
@@ -19,37 +20,47 @@ void commonTasks() {
 
 
 /*****************************************************************************-
- * setRunningState()
+ * setRunningState()  Set isRunning variable to control motors
+ *                    & set LED blink
  *****************************************************************************/
 void setRunningState() {
-  static int oldCh3State = 0;
+
+  // Set state variables
+  isRunning = isRunReady;
+  isBalancing = isUpright;
+
+  // Set Led flash
+  if (isRouteInProgress) {
+    if (!isUpright) isRunning = false;
+    if (!isRunning) currentBlink = BLINK_SLOW;
+    else currentBlink = BLINK_SLOW_FLASH;
+  } else {
+    if (!isUpright && isRunning) currentBlink = BLINK_FAST_FLASH;
+    else if (isUpright && isRunning) currentBlink = BLINK_ON;
+    else currentBlink = BLINK_OFF;
+  }
+}
+
+
+
+/*****************************************************************************-
+ * checkController()  Changes in RC controller?
+ *****************************************************************************/
+void checkController() {
+  static bool oldCh3State = false;
   static int oldCh4State = 0;
 
-  // Run a plan if ch3 turns on
-  if ((ch3State == true) && (oldCh3State == false)) {
-    isStartGetUp = true;
+  if (oldCh3State != ch3State) { // Start/stop button
+    if (ch3State == true) isRunReady = true;
+    else isRunReady = false;
+    oldCh3State = ch3State;
   }
-  oldCh3State = ch3State;
 
-  // Change run state SixPotatoe if there is a change in state on ch4
-  if (ch4State == 2) { // Panic?
-    isRunReady = false;
-  } else if ((ch4State == 1) && (oldCh4State != 1)) { // Transistion to 1?
-    isRunReady = true;
-  }
-  else if ((ch4State == 0) && (oldCh4State != 0)) {  // Transition to 0?
-    isRunReady = false;
-  }
-  oldCh4State = ch4State;
-
-  // Set isRunning variable to control motors
-  if (isRunReady && isUpright) {
-    isRunning = true;
-    currentBlink = On;
-  } else {
-    isRunning = false;
-    if (isRunReady) currentBlink = FastFlash;
-    else currentBlink = SlowFlash;
+  
+  if (oldCh4State != ch4State) { // Route button 
+    if (oldCh4State == 0) runRoute(ch5State);
+    else if (ch4State == 0) stopRoute();
+    oldCh4State = ch4State;
   }
 }
 
@@ -68,27 +79,23 @@ void blinkLed() {
 
     blinkCount++;
     switch (currentBlink) {
-      case SlowFlash:
+      case BLINK_SLOW_FLASH:
         buState = ((blinkCount % 10) == 0);
         break;
-      case FastFlash:
+      case BLINK_FAST_FLASH:
         buState = ((blinkCount % 2) == 0);
         break;
-      case SlowBlink:
+      case BLINK_SLOW:
         buState = (((blinkCount / 5) % 2) == 0);
         break;
-      case On:
+      case BLINK_ON:
         buState = true;
         break;
-      case Off:
       default:
         buState = false;
         break;
     }
-    analogWrite(LED_BU_PIN, buState ? 80 : 0);
-
-//    digitalWrite(LED_BU_PIN, buState ? HIGH : LOW);
-//    digitalWrite(LED_GN_PIN, gnState ? HIGH : LOW);
+    analogWrite(LED_BU_PIN, buState ? K20 : 0);
   }
 }
 void blink13() {  // Just blink the Teensy
@@ -104,12 +111,6 @@ void blink13() {  // Just blink the Teensy
  *****************************************************************************/
 void checkUpright() {
   static unsigned long lastUpTime = 0UL;
-
-  if (isStartGetUp) {
-    isStartGetUp = false;
-    gettingUp(true); // Reset
-    lastUpTime = timeMilliseconds;
-  }
 
   boolean cState = (abs(imu.maPitch) < K15); // Current real state
   if (cState == true) {
@@ -164,12 +165,11 @@ void checkLogDump() {
       Serial.println(logHeader);
       end = (isLogFloatWrap) ? N_FLOAT_LOGS : logFloatCount;
       for (int i = 0; i < end; i++) {
-        sprintf(message, "%12.3f,%9.3f,%9.3f,%9.2f", 
-                logFloats[0][i],
-                logFloats[1][i],
-                logFloats[2][i],
-                logFloats[3][i]);
-        Serial.println(message);
+        Serial.printf("%12.3f,%9.3f,%9.3f,%9.2f\n", 
+                      logFloats[0][i],
+                      logFloats[1][i],
+                      logFloats[2][i],
+                      logFloats[3][i]);
       }
     }
   }
@@ -231,15 +231,21 @@ void switches() {
  *****************************************************************************/
 void updateCartesian() {
   static int oldTickPosition = 0;
+  static float oldGHeading = 0.0;
 
 //  compute the Center of Oscillation Tick Position
 //  coTickPosition = tickPosition - ((long) (sin(gaPitch * DEG_TO_RAD) * 4000.0));
 
   // Compute the new xy position
-  double dist = ((double) (tickPosition - oldTickPosition)) / TICKS_PER_METER;
+  double dist = ((double) (tickPosition - oldTickPosition)) / (TICKS_PER_METER * 2.0);
+  currentDistance += dist;
   oldTickPosition = tickPosition;
-  currentLoc.x += sin(imu.gHeading * DEG_TO_RAD) * dist;
-  currentLoc.y += cos(imu.gHeading * DEG_TO_RAD) * dist;
+  float heading = imu.gHeading;
+  currentLoc.x += sin(heading * DEG_TO_RAD) * dist;
+  currentLoc.y += cos(heading * DEG_TO_RAD) * dist;
+  float rotation = heading - oldGHeading;
+  currentRotation += rotation;
+  oldGHeading = heading;
 }
 
 void setHeading(float heading) {
@@ -336,10 +342,10 @@ void ch5Isr() {
   } else {
     int ch5pw = t - riseTime;
     ch5Val = ( 2.0 * ((float) (ch5pw - RC_MID))) / RC_RANGE;
-    if (ch5Val < -0.8) ch5State = 0;
-    else if (ch5Val < -0.2) ch5State = 1;
-    else if (ch5Val < 0.2) ch5State = 2;
-    else if (ch5Val < 0.8) ch5State = 3;
+    if (ch5Val < -0.75) ch5State = 0;
+    else if (ch5Val < -0.25) ch5State = 1;
+    else if (ch5Val < 0.25) ch5State = 2;
+    else if (ch5Val < 0.75) ch5State = 3;
     else ch5State = 4;
   }
 }

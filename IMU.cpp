@@ -71,25 +71,32 @@ void IMU::imuInit(Stream *serialImpl, TwoWire &wirePort, uint8_t ad0_val) {
   }
 
   // Set up Digital Low-Pass Filter configuration
-  ICM_20948_dlpcfg_t myDLPcfg;            // Similar to FSS, this uses a configuration structure for the desired sensors
-//  myDLPcfg.a = acc_d111bw4_n136bw;      // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
-//  myDLPcfg.a = acc_d23bw9_n34bw4;       // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
-    myDLPcfg.a = acc_d5bw7_n8bw3;          // acc_d111bw4_n136bw
-                                          // acc_d50bw4_n68bw8
-                                          // acc_d23bw9_n34bw4
-                                          // acc_d11bw5_n17bw
-                                          // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
-                                          // acc_d473bw_n499bw
+  // Similar to FSS, this uses a configuration structure for the desired sensors
+  
+  // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
+  // Format is dAbwB_nXbwZ - A is integer part of 3db BW, B is fraction. X is integer part of nyquist bandwidth, Y is fraction
+  // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
+  // acc_d111bw4_n136bw
+  // acc_d50bw4_n68bw8
+  // acc_d23bw9_n34bw4
+  // acc_d11bw5_n17bw
+  // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
+  // acc_d473bw_n499bw
 
-  myDLPcfg.g = gyr_d119bw5_n154bw3;       // (ICM_20948_GYRO_CONFIG_1_DLPCFG_e)
-                                          // gyr_d196bw6_n229bw8
-                                          // gyr_d151bw8_n187bw6
-                                          // gyr_d119bw5_n154bw3
-                                          // gyr_d51bw2_n73bw3
-                                          // gyr_d23bw9_n35bw9
-                                          // gyr_d11bw6_n17bw8
-                                          // gyr_d5bw7_n8bw9
-                                          // gyr_d361bw4_n376bw5
+  // (ICM_20948_GYRO_CONFIG_1_DLPCFG_e)
+  // Format is dAbwB_nXbwZ - A is integer part of 3db BW, B is fraction. X is integer part of nyquist bandwidth, Y is fraction
+  // gyr_d196bw6_n229bw8
+  // gyr_d151bw8_n187bw6
+  // gyr_d119bw5_n154bw3
+  // gyr_d51bw2_n73bw3
+  // gyr_d23bw9_n35bw9
+  // gyr_d11bw6_n17bw8
+  // gyr_d5bw7_n8bw9
+  // gyr_d361bw4_n376bw5
+  
+  ICM_20948_dlpcfg_t myDLPcfg; 
+  myDLPcfg.a = acc_d23bw9_n34bw4; 
+  myDLPcfg.g = gyr_d119bw5_n154bw3;                                    
 
   imu.setDLPFcfg( (ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg );
   imu.enableDLPF( ICM_20948_Internal_Acc, true );
@@ -244,7 +251,7 @@ boolean IMU::isNewImuData() {
     accelY   = imu.accY() / 1000;  // divide to get units in g
     accelZ   = imu.accZ() / 1000;  // divide to get units in g
 
-    float gyroPitchDelta = imu.gyrX();
+    float gyroPitchDelta = imu.gyrX() + 1.4; // better to do offset dynamically TODO
     float gyroXrad = gyroPitchDelta * DEG_TO_RAD;                  // radians/sec
     float gyroRollDelta = imu.gyrY();
     float gyroYrad = gyroRollDelta * DEG_TO_RAD;                  // radians/sec
@@ -254,8 +261,6 @@ boolean IMU::isNewImuData() {
 //    sprintf(message, "AG: %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f", accelX, accelY, accelZ, gyroPitchDelta, gyroRollDelta, gyroYawDelta);
 //    _serialOut->println(message);
 
-    compFilter(gyroPitchDelta, gyroRollDelta, gyroYawDelta, accelX, accelY, accelZ);
-    accelUpdate();
     //    MadgwickQuaternionUpdate(accelX, accelY, accelZ, gyroXrad, gyroYrad, gyroZrad);
     MahonyAHRSupdateIMU(gyroXrad, gyroYrad, gyroZrad, accelX, accelY, accelZ);
 
@@ -266,6 +271,8 @@ boolean IMU::isNewImuData() {
     maRoll  = maRollRad * RAD_TO_DEG;
     maYaw   = maYawRad * RAD_TO_DEG;
 
+    compFilter(gyroPitchDelta, gyroRollDelta, gyroYawDelta, accelX, accelY, accelZ);
+    accelUpdate();
 
 //    sprintf(message, "%7.2f %7.2f %7.2f %7.2f %7.2f %7d", maPitch, maRoll, maYaw, gaPitch, gaRoll, t2 - t1);
 //    _serialOut->println(message);
@@ -284,6 +291,4 @@ boolean IMU::isNewImuData() {
  *                 the acceleration along the y/x? axis.
  *****************************************************************************/
 void IMU::accelUpdate() {
-//  tireZAccel = (cos(gaPitch * DEG_TO_RAD) * accelZ) + (sin(gaPitch * DEG_TO_RAD) * accelY);
-//  tireYAccel = (sin(gaPitch * DEG_TO_RAD) * accelZ) + (cos(gaPitch * DEG_TO_RAD) * accelY);
 }
