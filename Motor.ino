@@ -154,7 +154,7 @@ void runMotors() {
  * runMotor????()  Called every loop
  *****************************************************************************/
 void runMotorRight() {
-  float motorGain = MOTOR_GAIN;
+  float motorGain = K0;
   readSpeedRight();
 
   float wsError = (float) (targetWKphRight - wKphRight);
@@ -167,7 +167,7 @@ void runMotorRight() {
 }
 
 void runMotorLeft() {
-  float motorGain = MOTOR_GAIN;
+  float motorGain = K0;
   readSpeedLeft();
 
   float wsError = (float) (targetWKphLeft - wKphLeft);

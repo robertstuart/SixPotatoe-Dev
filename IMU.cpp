@@ -1,5 +1,10 @@
 /*****************************************************************************-
  *                                 IMU.cpp
+ *            Functions to acces the Invensense ICM-20948.
+ *         It uses the library from Sparkfun.  The enumerated
+ *         values are specified in the following header file:
+ *  "Arduino\libraries\SparkFun_9DoF_IMU_Breakout_-_ICM_20948_-_Arduino_Library\src\util\ICM_20948_ENUMERATIONS.h"
+ *            
  *****************************************************************************/
 #include "IMU.h"
 #define sampleFreq  200.0f      // sample frequency in Hz
@@ -14,120 +19,64 @@ float q[4] = {0.0f, 0.0f, 0.0f, 0.0f};            // vector to hold quaternion
 
 // Base
 IMU::IMU() {
-  // Default to using Serial for output
-  _serialOut = &Serial;
+
 }
 
 /*****************************************************************************-
- *   imuInit()
+ *   imuInit()  Initialize the Invensense ICM-20948.  This function use
  *****************************************************************************/
-void IMU::imuInit() {
-  imuInit(&Serial, WIRE_PORT, AD0_VAL);
-}
-
-void IMU::imuInit(Stream *serialImpl) {
-  imuInit(serialImpl, WIRE_PORT, AD0_VAL);
-}
-
-void IMU::imuInit(Stream *serialImpl, TwoWire &wirePort, uint8_t ad0_val) {
-  _serialOut = serialImpl;
+void IMU::imuInit(TwoWire &wirePort, uint8_t ad0_val) {
 
   bool initialized = false;
   while( !initialized ) {
     // start communication with IMU
-    imu.begin( wirePort, ad0_val );
-    _serialOut->print( F("Initialization of the sensor returned: ") );
-    _serialOut->println( imu.statusString() );
-    if( imu.status != ICM_20948_Stat_Ok ){
-      _serialOut->println( "Trying again..." );
+    icm20948.begin( wirePort, ad0_val );
+    if( icm20948.status != ICM_20948_Stat_Ok ){
+      checkError("begin");
+      Serial.printf("  Trying again...\n");
       delay(500);
-    }else{
+    } else {
       initialized = true;
     }
   }
 
   // Set sample rate
-  setSampleRate(sampleFreq);
+  ICM_20948_smplrt_t mySmplrt;
+  mySmplrt.g = (1125/sampleFreq) - 1;
+  mySmplrt.a = (1125/sampleFreq) - 1;
+  icm20948.setSampleRate( ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr, mySmplrt );
+  checkError("setSample");
 
   // Set full scale ranges for both acc and gyr
-  ICM_20948_fss_t myFSS;  // This uses a "Full Scale Settings" structure that can contain values for all configurable sensors
-
-  myFSS.a = gpm8;         // (ICM_20948_ACCEL_CONFIG_FS_SEL_e)
-                          // gpm2
-                          // gpm4
-                          // gpm8
-                          // gpm16
-
-  myFSS.g = dps2000;      // (ICM_20948_GYRO_CONFIG_1_FS_SEL_e)
-                          // dps250
-                          // dps500
-                          // dps1000
-                          // dps2000
-
-  imu.setFullScale( (ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myFSS );
-  if( imu.status != ICM_20948_Stat_Ok){
-    _serialOut->print(F("setFullScale returned: "));
-    _serialOut->println(imu.statusString());
-  }
-
+  ICM_20948_fss_t myFSS;
+  myFSS.a = gpm8;         // see ICM_20948_ENUMERATIONS.h
+  myFSS.g = dps2000;      // see ICM_20948_ENUMERATIONS.h
+  icm20948.setFullScale( (ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myFSS );
+  checkError("setFullScale");
+  
   // Set up Digital Low-Pass Filter configuration
-  // Similar to FSS, this uses a configuration structure for the desired sensors
-  
-  // (ICM_20948_ACCEL_CONFIG_DLPCFG_e)
-  // Format is dAbwB_nXbwZ - A is integer part of 3db BW, B is fraction. X is integer part of nyquist bandwidth, Y is fraction
-  // acc_d246bw_n265bw      - means 3db bandwidth is 246 hz and nyquist bandwidth is 265 hz
-  // acc_d111bw4_n136bw
-  // acc_d50bw4_n68bw8
-  // acc_d23bw9_n34bw4
-  // acc_d11bw5_n17bw
-  // acc_d5bw7_n8bw3        - means 3 db bandwidth is 5.7 hz and nyquist bandwidth is 8.3 hz
-  // acc_d473bw_n499bw
+  ICM_20948_dlpcfg_t myDLPcfg; // see ICM_20948_ENUMERATIONS.h
+  myDLPcfg.a = acc_d23bw9_n34bw4;      // BW = 23, see ICM_20948_ENUMERATIONS.h 
+//  myDLPcfg.a = acc_d11bw5_n17bw;       // BW = 11, see ICM_20948_ENUMERATIONS.h 
+  myDLPcfg.g = gyr_d119bw5_n154bw3;    // BW = 119, see ICM_20948_ENUMERATIONS.h 
+//  myDLPcfg.g = gyr_d51bw2_n73bw3;    // BW = 52, see ICM_20948_ENUMERATIONS.h 
+//  myDLPcfg.g = gyr_d23bw9_n35bw9;    // BW = 23, see ICM_20948_ENUMERATIONS.h 
+  icm20948.setDLPFcfg( (ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg );
+  checkError("setDLPFcfg");
+  icm20948.enableDLPF( ICM_20948_Internal_Acc, true );
+  checkError("Accelerometer: enableDLPF");
+  icm20948.enableDLPF( ICM_20948_Internal_Gyr, true );
+  checkError("Gyro: enableDLPF");
 
-  // (ICM_20948_GYRO_CONFIG_1_DLPCFG_e)
-  // Format is dAbwB_nXbwZ - A is integer part of 3db BW, B is fraction. X is integer part of nyquist bandwidth, Y is fraction
-  // gyr_d196bw6_n229bw8
-  // gyr_d151bw8_n187bw6
-  // gyr_d119bw5_n154bw3
-  // gyr_d51bw2_n73bw3
-  // gyr_d23bw9_n35bw9
-  // gyr_d11bw6_n17bw8
-  // gyr_d5bw7_n8bw9
-  // gyr_d361bw4_n376bw5
-  
-  ICM_20948_dlpcfg_t myDLPcfg; 
-  myDLPcfg.a = acc_d23bw9_n34bw4; 
-  myDLPcfg.g = gyr_d119bw5_n154bw3;                                    
-
-  imu.setDLPFcfg( (ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg );
-  imu.enableDLPF( ICM_20948_Internal_Acc, true );
-  imu.enableDLPF( ICM_20948_Internal_Gyr, true );
-
-  if( imu.status != ICM_20948_Stat_Ok){
-    _serialOut->print(F("setDLPcfg returned: "));
-    _serialOut->println(imu.statusString());
-  }
-
-
-  _serialOut->println();
-  _serialOut->println(F("Configuration complete!"));
-
+  char* stat = (isError) ? "failed" : "complete";
+  Serial.printf("\nICM-20948 configuration %s!", stat);
 }
 
-/*******************************************************************-
- * The documentation for the ICM-20948 states that the
- * GYRO_SMPLRT_DIV and ACCEL_SMPLRT_DIV(1/2) registers
- * "Divide the internal sample rate to generate the sample rate
- *  that controls sensor data output rate, FIFO sample rate, and
- *  DMP sequence rate."
- *  The Data Output Rate is computed as: 1.125 / (1 + GYRO_SMPLRT_DIV).
- */
-void IMU::setSampleRate(float smplFreq) {
-    ICM_20948_smplrt_t mySmplrt;
-  mySmplrt.g = (1125/smplFreq) -1;
-  mySmplrt.a = (1125/smplFreq) -1;
-  imu.setSampleRate( ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr, mySmplrt );
-  _serialOut->print(F("setSampleRate returned: "));
-  _serialOut->println(imu.statusString());
+void IMU::checkError(char* s) {
+  if( icm20948.status != ICM_20948_Stat_Ok) {
+    isError = true;
+    Serial.printf("%s() returned: %s\n", icm20948.statusString());
+  }
 }
 
 
@@ -239,45 +188,48 @@ void MahonyAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float
   q[3] = q3 *= recipNorm;
 } // End MahonyAHRSupdateIMU()
 
+
+
 /*****************************************************************************-
     isNewImuData()   Returns true if the IMU has new data.
                 Reads the IMU and sets the new values.
  *****************************************************************************/
 boolean IMU::isNewImuData() {
 
-  if (imu.dataReady()) {
-    imu.getAGMT();
-    accelX   = imu.accX() / 1000;  // divide to get units in g
-    accelY   = imu.accY() / 1000;  // divide to get units in g
-    accelZ   = imu.accZ() / 1000;  // divide to get units in g
+  if (icm20948.dataReady()) {
+    icm20948.getAGMT();
+    accelX   = icm20948.accX() / 1000;  // divide to get units in g
+    accelY   = icm20948.accY() / 1000;  // divide to get units in g
+    accelZ   = icm20948.accZ() / 1000;  // divide to get units in g
 
-    float gyroPitchDelta = imu.gyrX() + 1.4; // better to do offset dynamically TODO
+    float gyroPitchDelta = icm20948.gyrX(); // better to do offset dynamically TODO
+    float gyroRollDelta = icm20948.gyrY();
+    float gyroYawDelta = icm20948.gyrZ();
+    checkDrift(gyroPitchDelta, gyroRollDelta, gyroYawDelta);
+    gyroPitchDelta -= timeDriftPitch;
+    gyroRollDelta -= timeDriftRoll;
+    gyroYawDelta -= timeDriftYaw;
     float gyroXrad = gyroPitchDelta * DEG_TO_RAD;                  // radians/sec
-    float gyroRollDelta = imu.gyrY();
     float gyroYrad = gyroRollDelta * DEG_TO_RAD;                  // radians/sec
-    float gyroYawDelta = imu.gyrZ();
     float gyroZrad = gyroYawDelta * DEG_TO_RAD;                  // radians/sec
-
-//    sprintf(message, "AG: %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f", accelX, accelY, accelZ, gyroPitchDelta, gyroRollDelta, gyroYawDelta);
-//    _serialOut->println(message);
+//    Serial.printf("AG: %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f\n", accelX, accelY, accelZ, gyroPitchDelta, gyroRollDelta, gyroYawDelta);
 
     //    MadgwickQuaternionUpdate(accelX, accelY, accelZ, gyroXrad, gyroYrad, gyroZrad);
     MahonyAHRSupdateIMU(gyroXrad, gyroYrad, gyroZrad, accelX, accelY, accelZ);
 
-    maPitchRad  = -atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
-    maRollRad = asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
-    maYawRad   = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
+    float maPitchRad  = -atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
+    float maRollRad = asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
+    float maYawRad   = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
     maPitch = maPitchRad * RAD_TO_DEG;
     maRoll  = maRollRad * RAD_TO_DEG;
-    maYaw   = maYawRad * RAD_TO_DEG;
+    maYaw   = -maYawRad * RAD_TO_DEG;
 
     compFilter(gyroPitchDelta, gyroRollDelta, gyroYawDelta, accelX, accelY, accelZ);
-    accelUpdate();
 
-//    sprintf(message, "%7.2f %7.2f %7.2f %7.2f %7.2f %7d", maPitch, maRoll, maYaw, gaPitch, gaRoll, t2 - t1);
-//    _serialOut->println(message);
-//    t1 = t2;
+    vertAccel = (cos(maPitch * DEG_TO_RAD) * accelZ) + (sin(maPitch * DEG_TO_RAD) * accelY);
+    horAccel = (sin(maPitch * DEG_TO_RAD) * accelZ) + (cos(maPitch * DEG_TO_RAD) * accelY);
 
+//    Serial.printf("%7.2f %7.2f %7.2f %7.2f %7.2f %7.2f\n", maPitch, maRoll, maYaw, gaPitch, gaRoll, gHeading);
     return true;
   } else {
     return false; // no IMU read
@@ -287,8 +239,95 @@ boolean IMU::isNewImuData() {
 
 
 /*****************************************************************************-
- *  accelUpdate()  Compute vertical acceleration and horizontal speed from
- *                 the acceleration along the y/x? axis.
+ * checkDrift()  Called 200/sec.  Averages gyroDrift for x, y & z
+ *              for 1/2 second periods.
  *****************************************************************************/
-void IMU::accelUpdate() {
+void IMU::checkDrift(float gyroPitchDelta, float gyroRollDelta, float gyroYawDelta) {
+  static int gPtr = 0;
+  static float aXSum, aZSum;
+  float pitch, roll, yaw;
+
+  pitchArray[gPtr] = gyroPitchDelta;
+  rollArray[gPtr] = gyroRollDelta;
+  yawArray[gPtr] = gyroYawDelta;
+  aXSum += accelX;
+  aZSum += accelZ;
+  gPtr++;
+
+  if (gPtr >= DRIFT_SIZE) {
+    gPtr = 0;
+    float pitchSum = 0;
+    float rollSum = 0;
+    float yawSum = 0;
+    float pitchMax = pitchArray[0];
+    float pitchMin = pitchMax;
+    float rollMax = rollArray[0];
+    float rollMin = rollMax;
+    float yawMax = yawArray[0];
+    float yawMin = yawMax;
+    for (int i = 0; i < DRIFT_SIZE; i++) {
+      pitch = pitchArray[i];
+      if (pitch > pitchMax)  pitchMax = pitch;
+      if (pitch < pitchMin)  pitchMin = pitch;
+      pitchSum += pitch;
+      roll = rollArray[i];
+      if (roll > rollMax)  rollMax = roll;
+      if (roll < rollMin)  rollMin = roll;
+      rollSum += roll;
+      yaw = yawArray[i];
+      if (yaw > yawMax)  yawMax = yaw;
+      if (yaw < yawMin)  yawMin = yaw;
+      yawSum += yaw;
+    }
+    float pitchAve = ((float) pitchSum) / ((float) DRIFT_SIZE);
+    float rollAve = ((float) rollSum) / ((float) DRIFT_SIZE);
+    float yawAve = ((float) yawSum) / ((float) DRIFT_SIZE);
+
+    // If we have a stable 0.5 second period, average the most recent 20 periods & adjust drift.
+    if (((pitchMax - pitchMin) < RANGE_MAX) && ((rollMax - rollMin) < RANGE_MAX) && ((yawMax - yawMin) < RANGE_MAX)) {
+      setDrift(pitchAve, rollAve, yawAve);
+    }
+//    Serial.printf("pitchMin: %4.1f     pitchMax: %4.1f     pitchAve: %5.1f   ", pitchMin, pitchMax, pitchAve);
+//    Serial.printf("rollMin: %4.1f     rollMax: %4.1f     rollAve: %5.2f   ", rollMin, rollMax, rollAve);
+//    Serial.printf("yawMin: %4.1f     yawMax: %4.1f     yawAve: %5.1f\n", yawMin, yawMax, yawAve);
+//    Serial.printf("pitch: %7.4f    roll: %7.4f    yaw: %7.4f\n", pitchMax - pitchMin, rollMax - rollMin, yawMax - yawMin);
+  }
+}
+
+
+
+/*****************************************************************************-
+ *    setDrift()  Called to add the last 1/2 sec of drift values.
+ *****************************************************************************/
+void IMU::setDrift(float pitchAve, float rollAve, float yawAve) {
+  static const int AVE_SIZE =  20;      // Equals 10 seconds of measurements
+  static float pitchAveArray[AVE_SIZE];
+  static float rollAveArray[AVE_SIZE];
+  static float yawAveArray[AVE_SIZE];
+  static int avePtr = 0;
+
+  float sumPitchAve = 0.0;
+  float sumRollAve = 0.0;
+  float sumYawAve = 0.0;
+
+  pitchAveArray[avePtr] = pitchAve;
+  rollAveArray[avePtr] = rollAve;
+  yawAveArray[avePtr] = yawAve;
+
+  ++avePtr;
+  avePtr = avePtr % AVE_SIZE;
+  if (aveTotal < avePtr) aveTotal = avePtr;
+
+  for (int i = 0; i < aveTotal; i++) {
+    sumPitchAve += pitchAveArray[i];
+    sumRollAve += rollAveArray[i];
+    sumYawAve += yawAveArray[i];
+  }
+  float avePitchDrift = sumPitchAve / aveTotal;
+  float aveRollDrift = sumRollAve / aveTotal;
+  float aveYawDrift = sumYawAve / aveTotal;
+  timeDriftPitch = avePitchDrift;
+  timeDriftRoll = aveRollDrift;
+  timeDriftYaw = aveYawDrift;
+//  Serial.printf("pitch: %7.4f    roll: %7.4f    yaw: %7.4f\n", timeDriftPitch, timeDriftRoll, timeDriftYaw);
 }

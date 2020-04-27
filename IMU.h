@@ -9,30 +9,33 @@ const float GYRO_WEIGHT = 0.997;
 class IMU
 {
 private:
-  Stream *_serialOut;
-  ICM_20948_I2C imu;
-  char message[80];
+  ICM_20948_I2C icm20948;
 
-  void accelSet(float accelX, float accelY, float accelZ);
-  void accelUpdate();
+  float RANGE_MAX = 2.0;
   void compFilter(float gyroX, float gyroY, float gyroZ, float accelX, float accelY, float accelZ);
   void MadgwickQuaternionUpdate(float ax, float ay, float az, float gx, float gy, float gz);
   void printFormattedFloat(float val, uint8_t leading, uint8_t decimals);
   void setSampleRate(float smplFreq);
-
-  float maPitchRad = 0.0;
-  float maRollRad = 0.0;
-  float maYawRad = 0.0;
-
+  void checkDrift(float gyroPitchDelta, float gyroRollDelta, float gyroYawDelta);
+  void setDrift(float pitchAve, float rollAve, float yawAve);
+  void checkError(char* s);
+  
+  bool isError = false;
+  const static int DRIFT_SIZE = 100;  // 1/2 second of data
+  int aveTotal = 0;  // Total of gyro averages taken.
+  float pitchArray[DRIFT_SIZE];
+  float rollArray[DRIFT_SIZE];
+  float yawArray[DRIFT_SIZE];
+  float timeDriftPitch = 0.0;
+  float timeDriftRoll = 0.0;
+  float timeDriftYaw = 0.0;
 
 protected:
 
 public:
   IMU(); // Constructor
 
-  void imuInit();
-  void imuInit(Stream *serialImpl);
-  void imuInit(Stream *serialImpl, TwoWire &wirePort, uint8_t ad0_val);
+  void imuInit(TwoWire &wirePort, uint8_t ad0_val);
   boolean isNewImuData();
   void printScaledAGMT();
   
@@ -49,8 +52,7 @@ public:
   float accelZ = 0.0;
 
   float vertAccel = 0.0;
-  float horizAccel = 0.0;
-  float horizSpeed = 0.0;
+  float horAccel = 0.0;
 
 };
 

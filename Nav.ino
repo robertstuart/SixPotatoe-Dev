@@ -16,21 +16,41 @@ unsigned long getUpPhase2Time = 100;
 void routeControl() {
   boolean isNewRouteStep = false;
   timeRun = timeMilliseconds - timeStart;
+  isBowlBalancing = isAir = false;
 //  targetWKphRight = targetWKphLeft = targetWKph;
 
   // See of we need to move to the next route step.
   switch (routeCurrentAction) {
-    case 'N':
+    
+    case 'B':
+      if (doBowl()) isNewRouteStep = true;
+      if ((timeMilliseconds - bowlStartTime) > 1000) isNewRouteStep = true;
+      break;
+      
     case 'F':
-    case 'P':
+    case 'Q':
       isNewRouteStep = true;
       break;
 
+    case 'A':
+      if (doAir()) isNewRouteStep = true;
+      break;
+      
     case 'G':
       if (currentDistance > stepDistance) isNewRouteStep = true;
       else steerTarget();
       break;
 
+    case 'P':
+      if (isRunning) {
+        setHeading(rangeAngle(startOrientation));
+        currentLoc = startLoc;
+        timeStart = timeMilliseconds;
+        routeKph = 0.0;
+        isNewRouteStep = true; // Wait for isRunning.
+      }
+      break;
+      
     case 'T': // Turn
       if (abs(currentRotation) > abs(stepRotation)) isNewRouteStep = true;
       else turn();
@@ -39,7 +59,7 @@ void routeControl() {
       if (isGettingUp) {
         if (getUp(false)) isNewRouteStep = true;
       } else {
-        if (isRunReady) {
+        if (isRunning) {
           getUp(true);
           isGettingUp = true;
         }
@@ -65,24 +85,37 @@ void routeControl() {
  *  interpretRouteLine()
  *      Called every time the end criterion for a route step is reached.
  *      Read the new route step and set the values.
- ************************************************************************/
+ *****************************************************************************/
 boolean interpretRouteLine(String ss) {
-  float aDiff;
-//  char char1;
-
   stepString = ss;
   originalStepStringPtr = 0;
   Serial.print(stepString);  Serial.print(":   ");
   routeCurrentAction = stepString.charAt(0);
   stepString = stepString.substring(1);
   originalStepStringPtr++;
+  isBowlBalancing = isAir = false;
 
 //  (*currentValSet).v = 2.0;  // restore speed correction.
 
   switch (routeCurrentAction) {
 
+    case 'A':  // Air, between "R" bowls
+      airWKph = bowlWKph = wKph;
+      airStartTime = timeMilliseconds;
+  addLog(0.0, 0.0, 0.0, 0.0);
+      break;
+
+    case 'B': // Bowl.
+      readBowl();
+      if (bowlArraySize < 10) return false;
+      Serial.printf("%.2f:    ", stepDistance);
+      for (int i = 0; i < bowlArraySize; i++) Serial.printf("%.0f ", bowlArray[i]);
+      bowlStartTime = timeMilliseconds;
+  addLog(0.0, 0.0, 0.0, 0.0);
+      break;
+      
     case 'F':  // Fini
-      isRouteInProgress = false;
+      stopRoute();
       break;
 
     case 'G':  // Go to the next waypoint
@@ -97,25 +130,20 @@ boolean interpretRouteLine(String ss) {
       currentDistance = 0.0;
       break;
 
-    case 'P': // Position.  Normally at start
+    case 'P': // Position. Waits for runReady. Required at start
       startLoc = readLoc();
       Serial.printf("%.2f,%.2f  ", startLoc.x, startLoc.y);
       if (startLoc.y == STEP_ERROR) return false;
       startOrientation = readNum();
       Serial.printf("%.2f  ", startOrientation);
       if ((startOrientation < -180.0D) || (startOrientation > 180.0)) return false;
-      setHeading(rangeAngle(startOrientation));
-      currentLoc = startLoc;
-      timeStart = timeMilliseconds;
-      routeKph = 0.0;
       break;
 
-    case 'N':  // Name of route
-      stripWhite();
-      routeTitle = stepString;
-      Serial.print(routeTitle);
+    case 'Q': // Quit.  Fini. Turn motors off
+      isRunning = false;
+      stopRoute();
       break;
-
+      
     case 'T':  // Turn at radius ending at waypoint.
       stepRotation = readNum();
       Serial.printf("%.2f  ", stepRotation);
@@ -158,8 +186,9 @@ boolean interpretRouteLine(String ss) {
  *  steerTarget() Find the correct heading to the target and adjust the
  *               wheel speeds to turn toward the target.  As tp approaches
  *               the target, use the originalTargetBearing.
- ************************************************************************/
+ *****************************************************************************/
 void steerTarget() {
+  setTarget();
   balanceTargetKph = routeKph;
   if ((stepDistance - currentDistance) < 0.3 ) { 
     balanceSteerAdjustment = 0.0;
@@ -185,7 +214,7 @@ void steerTarget() {
 
 /*****************************************************************************-
  *  turn() Turn with a given radius.
- ************************************************************************/
+ *****************************************************************************/
 void turn() {
   balanceTargetKph = routeKph;
   currentRotation = startTurnBearing - imu.gHeading;
@@ -216,7 +245,7 @@ void turn() {
 
 /*****************************************************************************-
  *  get up()  Return true if done getting up.
- ***********************************************************************/
+ *****************************************************************************/
 bool getUp(bool reset) {
   const int msPhase1 = 200;
   const float speedPhase1 = 3.0;
@@ -229,7 +258,6 @@ bool getUp(bool reset) {
     isPhase1 = true;
     startTime = timeMilliseconds;
   } else {
-    if (isRunReady) isRunning = true;
     float d = (imu.gaPitch > 0.0) ? 1.0 : -1.0;
     if (isPhase1) {
       float pct = ((float) (timeMilliseconds - startTime)) / ((float) msPhase1);
@@ -242,9 +270,70 @@ bool getUp(bool reset) {
       targetWKphRight = targetWKphLeft = -d * speedPhase2;
       if ((timeMilliseconds - startTime) >= msPhase2) return true;
     }
-log(imu.maPitch, isPhase1, timeMilliseconds - startTime, targetWKphRight);
+//log(imu.maPitch, isPhase1, timeMilliseconds - startTime, targetWKphRight);
   }
   return (isUpright) ? true : false;
+}
+
+
+
+/*****************************************************************************-
+ *  Bowl Compute the pitch angle for each point.
+ *****************************************************************************/
+boolean doBowl() {
+  if (stepDistance > 0.0) {
+    if (currentDistance > stepDistance) return true;
+  } else {
+    if (currentDistance < stepDistance) return true;
+  }
+  isBowlBalancing = true;
+  float valA, valB;
+  int ptr = abs((int) (currentDistance * 10.0));
+  if (ptr < 0) {
+    bowlTargetPitch = bowlArray[0];
+  } else if ((ptr + 2) > bowlArraySize) {
+    bowlTargetPitch = bowlArray[bowlArraySize -1];
+  } else {   
+    float pct = (10.0 * currentDistance) - ((float) ptr);
+    if ((((int) currentDistance) + 2) >= bowlArraySize) {
+      valA = valB = bowlArray[bowlArraySize - 1];
+    } else {
+      valA = bowlArray[ptr];
+      valB = bowlArray[ptr + 1];
+    }
+
+    // Interpolate
+    float diff = valB - valA;
+    float valC = pct * diff;
+    bowlTargetPitch = valA + valC;
+  }
+
+  // Get bowl completed which is 0.0 at beginning 1.0 at end;
+  bowlCompleted = currentDistance / stepDistance;
+  bowlCompleted = constrain(bowlCompleted, 0.0, 1.0);
+//addLog(imu.accelZ, wKph, currentDistance, imu.maPitch);
+  return false;
+}
+
+
+
+/*****************************************************************************-
+ *  doAir() 
+ *          accelerates at 35.28 kph/sec due to gravity
+ *          35.28 / 200 = 0.176 speed change per cycle
+ *          830, 910, +0.5 for 17Kph
+ *****************************************************************************/
+bool doAir() {
+  isAir = true;
+  unsigned long airTime = timeMilliseconds - airStartTime;
+
+  if (airTime < 500) {
+    targetWKphRight = targetWKphLeft = bowlWKph;
+  } else {
+    targetWKphRight = targetWKphLeft = -(bowlWKph + 3.5);
+  }
+//addLog(imu.accelZ, wKph, airTime, imu.maPitch);
+  return (airTime > 700) ? true : false;
 }
 
 
@@ -253,7 +342,7 @@ log(imu.maPitch, isPhase1, timeMilliseconds - startTime, targetWKphRight);
  *  isTargetReached()  Return true if within 1 ft of target and is
  *                     moving away from the target.
  *                     Return true if at end of decel.
- ***********************************************************************/
+ *****************************************************************************/
 //boolean isTargetReached() {
 ////  const int RETREAT_TIMES = 10;
 ////  const int RETREAT_DISTANCE = 2.0;
@@ -290,7 +379,7 @@ log(imu.maPitch, isPhase1, timeMilliseconds - startTime, targetWKphRight);
 /*****************************************************************************-
  *  setTarget() Set the new targetBearing and targetDistance from
  *              the currentLoc.
- ************************************************************************/
+ *****************************************************************************/
 void setTarget() {
   double x =  targetLoc.x - currentLoc.x;
   double y = targetLoc.y - currentLoc.y;
@@ -309,8 +398,8 @@ String getNextStepString() {
 
 
 /*****************************************************************************-
- *  runRoute()
- ***********************************************************************/
+ *  runRoute() 
+ *****************************************************************************/
 void runRoute(int routeNum) {
   currentRoute = routeTable[routeNum];
   routeStepPtr = 0;
@@ -322,7 +411,11 @@ void runRoute(int routeNum) {
       Serial.printf("Error step %d!\n", routeStepPtr);
       return;
     }
-    if (!isRouteInProgress) break;
+    if ((routeStepPtr == 1) && (routeCurrentAction != 'P')) {
+      Serial.println("P required for first step");
+      return;
+    }
+    if (!isRouteInProgress) break; 
   }
   // It made it here.  Therefore run it.
   routeStepPtr = 0;
@@ -340,18 +433,19 @@ void runRoute(int routeNum) {
 
 /*****************************************************************************-
  *  stopRoute()
- ***********************************************************************/
+ *****************************************************************************/
 void stopRoute() {
   isRouteInProgress = false;
+  isBowlBalancing = false;
   setHeading(0.0);
 }
 
 /*****************************************************************************-
  *  Script parsing routines
- ***********************************************************************/
+ *****************************************************************************/
 double readNum() {
   stripWhite();
-  double num = stepString.toFloat();
+  float num = stepString.toFloat();
   stripNum();
   if (numLen == 0) return STEP_ERROR;
   return num;
@@ -371,6 +465,23 @@ struct loc readLoc() {
   if (numLen == 0) return locLoc;
   locLoc.y = y;
   return locLoc;
+}
+
+void readBowl() {
+  bowlArraySize = 0;
+  stripWhite();
+  stepDistance = stepString.toFloat();
+  currentDistance = 0.0;
+  stripNum();
+  if (numLen == 0) return;
+  while (true) {
+    stripWhite();
+    float num = stepString.toFloat();
+    stripNum();
+    if (numLen == 0) break;
+    bowlArray[bowlArraySize] = num;
+    bowlArraySize++;
+  }
 }
 
 void stripWhite() {

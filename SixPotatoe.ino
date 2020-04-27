@@ -11,7 +11,7 @@ const bool IS_TEST2 = false;  // Set to be true for the 2nd system test.
 const bool IS_TEST3 = false;  // Set to be true for the 3nd system test.
 const bool IS_TEST4 = false;  // Set to be true for the 4th system test.
 
-// System constants
+// wheel and motor constants
 //const float GYRO_WEIGHT = 0.997;
 const float WHEEL_DIA_MM = 120.6;
 //const float TICKS_PER_ROTATION = 329.5;  // 612 RPM motor
@@ -29,17 +29,17 @@ const int PWM_RIGHT_PIN   = 15;
 const int DIR_LEFT_PIN    = 16;
 const int DIR_RIGHT_PIN   = 17;
 
-const int ENC_A_LEFT_PIN  = 20;
-const int ENC_B_LEFT_PIN  = 21;
-const int ENC_A_RIGHT_PIN = 22;
-const int ENC_B_RIGHT_PIN = 23;
+const int ENC_B_LEFT_PIN  = 20;
+const int ENC_A_LEFT_PIN  = 21;
+const int ENC_B_RIGHT_PIN = 22;
+const int ENC_A_RIGHT_PIN = 23;
 
-const int CH1_RADIO_PIN   =  2;
-const int CH2_RADIO_PIN   =  3;
-const int CH3_RADIO_PIN   =  4;
-const int CH4_RADIO_PIN   =  5;
-const int CH5_RADIO_PIN   =  6;
-const int CH6_RADIO_PIN   =  7;
+const int CH1_RADIO_PIN   =  7;
+const int CH2_RADIO_PIN   =  6;
+const int CH3_RADIO_PIN   =  5;
+const int CH4_RADIO_PIN   =  4;
+const int CH5_RADIO_PIN   =  3;
+const int CH6_RADIO_PIN   =  2;
 
 const int LED_PIN         = 13;
 const int LED_BU_PIN      = 12;
@@ -47,27 +47,26 @@ const int SW_BU_PIN       = 11;
 const int WATCHDOG_PIN    =  8;
 
 // Tunable variables
-// const float MAX_BALANCE_KPH = 22.0;  // Maximum target for controller, 612 RPM
-const float MAX_BALANCE_KPH = 16.0;  // Maximum target for controller, 437 RPM
-const float MAX_GROUND_KPH = 5.0;
-const float MAX_GROUND_STEER = 2.0;
-const float K1 = 1.6;
-const float K2 = 0.05; // 1.0 passes all hf, near zero passes only low freq.
-const float CONST_ACCEL_LPF = 0.9;  
-const float CONST_ERROR_TO_ANGLE = 2.0;
-////const float CONST_ANGLE_TO_KPH = 0.2;
-//const float CONST_ANGLE_TO_KPH = 0.15;
-const float K10 = 1.4;   // accelerometer pitch offset
-const float MOTOR_GAIN = 4.0;
-const float K12 = 50.0;   // +- constraint on target pitch
-//float K13 = 30.0;   // +- constraint on pitch error to prevent too rapid righting
-const float K13 = 20.0;   // +- constraint on pitch error to prevent too rapid righting
-const float K14 = 0.15;    // Angle error to pitch
-const float K15 = 70;     // pitch beyond which is considered to not be upright
-const int   K16 = 50;    // ms time for pitch < K16 to be not upright
-const int   K20 = 80;     // LED brightness, 0-255;
-const float K21 = 0.95;
-const float ACCEL_TO_KPH = 0.213;
+const float K0  = 4.0;      // Motor gain
+const float K1  = 1.6;
+const float K2  = 0.05;     // 1.0 passes all hf, near zero passes only low freq.
+const float K3 = 0.213;     // Accelerometer to Kph
+const float K5  = 2.0;      // Speed error to angle
+const float K8  = 0.2;      // bowl roll compensation at top.
+const float K10 = 1.4;      // accelerometer pitch offset
+const float K12 = 50.0;     // +- constraint on target pitch
+//float K13 = 30.0;           // +- constraint on pitch error to prevent too rapid righting
+const float K13 = 20.0;     // +- constraint on pitch error to prevent too rapid righting
+const float K14 = 0.15;     // Angle error to Kph
+const float K15 = 70;       // pitch beyond which is considered to not be upright
+const int   K16 = 50;       // ms time for pitch < K16 to be not upright
+const float K17 = 0.1;      // "D"
+const int   K20 = 80;       // LED brightness, 0-255;
+const float K21 = 0.95;     // TC for accelCoKph
+//const float K30 = 22.0;     // Maximum Kph target for controller, 612 RPM
+const float K30 = 16.0;     // Maximum Kph target for controller, 437 RPM
+const float K31 = 5.0;      // Maximum speed for Kph on ground.
+const float K32 = 2.0;      // Maximum sterring on ground.
 
 enum BlinkState {
   BLINK_OFF,        //  motors off, no route
@@ -117,14 +116,10 @@ float targetWKph = 0.0;
 unsigned long timeMilliseconds = 0UL;
 unsigned long timeMicroseconds = 0UL;
 bool isRunning = false;
-bool isRunReady = false;
-bool isBalancing = true;
+bool isBowlBalancing = false;
+bool isAir = false;
 bool isUpright = false;
 bool isZeroG = false;
-//bool isPanic = false;
-
-//int bCount = 0;
-//unsigned long upStatTime = 0UL;
 
 long tickPosition = 0L;
 double tickMeters = 0.0;
@@ -139,7 +134,7 @@ volatile float controllerY = 0.0;   // ch2 accelerator
 volatile boolean ch3State = false;  // ch3 toggle
 volatile int ch4State = 0;          // ch4 3-position switch
 volatile float ch5Val = 0.0;        // ch5 top left potentiometer
-volatile int ch5State = 0;
+volatile int ch5State = 0;          // ch5 states 1-5
 volatile float ch6Val = 0.0;        // ch6 top right potentiometer.
 
 #define DBUFF_SIZE 10000
@@ -157,6 +152,7 @@ struct loc targetLoc;
 struct loc pivotLoc;
 struct loc hugStartLoc;
 struct loc coSetLoc;
+float zeroGKph = 0.0;
 unsigned long timeRun = 0;
 unsigned long timeStart = 0;
 char routeCurrentAction = 0;
@@ -166,9 +162,14 @@ boolean isRouteInProgress = false;
 float routeKph = 0.0;
 String routeTitle = "";
 float turnRadius = 0.0;
-//float tpKph = 0.0;
-
-// Route & Nav 
+float bowlEndDistance = 0.0;
+float bowlArray[100];
+unsigned long bowlStartTime = 0UL;
+int bowlArraySize = 0;
+float bowlTargetPitch = 0.0;
+//int rampTicksRight = 0;
+//int rampTicksLeft = 0;
+float bowlCompleted = 0.0;
 boolean isLoadedRouteValid = true;
 String *currentRoute = go;
 float getupSpeed = 0.0;
@@ -191,7 +192,9 @@ bool isGettingUp = false;
 int getUpTime = 0;
 unsigned long getUpEndTime = 0UL;
 float getUpSpeed = 0.0;
-
+float bowlWKph = 0.0;
+float airWKph = 0.0;
+unsigned long airStartTime = 0UL;
 
 IMU imu;
 
@@ -213,7 +216,7 @@ void setup() {
   digitalWrite(LED_BU_PIN, LOW);
 
   rcInit(); 
-  imu.imuInit(&Serial, Wire, 1);
+  imu.imuInit(Wire, 1);
   motorInit();
   delay(100); // For switches?
 }
@@ -243,7 +246,7 @@ void systemTest1() {
   if (imu.isNewImuData()) {
     unsigned long newT = millis();
     Serial.printf(
-            "Pitch:%6.2f   Roll:%6.2f   Yaw:%6.2f   Period:%2d ms", 
+            "Pitch:%6.2f   Roll:%6.2f   Yaw:%6.2f   Period:%2d ms\n", 
             imu.maPitch, imu.maRoll, imu.maYaw, ((int) (newT - lastT)));
     lastT = newT;
     blink13();

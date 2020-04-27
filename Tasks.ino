@@ -24,14 +24,9 @@ void commonTasks() {
  *                    & set LED blink
  *****************************************************************************/
 void setRunningState() {
-
-  // Set state variables
-  isRunning = isRunReady;
-  isBalancing = isUpright;
-
+  
   // Set Led flash
   if (isRouteInProgress) {
-    if (!isUpright) isRunning = false;
     if (!isRunning) currentBlink = BLINK_SLOW;
     else currentBlink = BLINK_SLOW_FLASH;
   } else {
@@ -51,14 +46,14 @@ void checkController() {
   static int oldCh4State = 0;
 
   if (oldCh3State != ch3State) { // Start/stop button
-    if (ch3State == true) isRunReady = true;
-    else isRunReady = false;
+    if (ch3State == true) isRunning = true;
+    else isRunning = false;
     oldCh3State = ch3State;
   }
 
   
   if (oldCh4State != ch4State) { // Route button 
-    if (oldCh4State == 0) runRoute(ch5State);
+    if (ch4State == 1) runRoute(ch5State);
     else if (ch4State == 0) stopRoute();
     oldCh4State = ch4State;
   }
@@ -171,6 +166,10 @@ void checkLogDump() {
                       logFloats[2][i],
                       logFloats[3][i]);
       }
+    } else if (c == 'z') {
+      Serial.println("Log set to zero.");
+      logFloatCount = 0;
+      isLogFloatWrap = false;
     }
   }
 }
@@ -178,9 +177,9 @@ void checkLogDump() {
 
 
 /*****************************************************************************-
- * log()
+ * addLog()
  *****************************************************************************/
-void log(float a, float b, float c, float d) {
+void addLog(float a, float b, float c, float d) {
   logFloats[0][logFloatCount] = a;
   logFloats[1][logFloatCount] = b;
   logFloats[2][logFloatCount] = c;
@@ -189,13 +188,6 @@ void log(float a, float b, float c, float d) {
   if (logFloatCount >= N_FLOAT_LOGS) {
     logFloatCount = 0;
     isLogFloatWrap = true;
-  }
-}
-void log(String s) {
-  logStrs[logStrCount] = s;
-  if (logStrCount >= N_STR_LOGS) {
-    logStrCount = 0;
-    isLogStrWrap = true;
   }
 }
 
@@ -216,7 +208,7 @@ void switches() {
   if ((timeMilliseconds - timerBu) > 50) buState = false;
   else buState = true;
   if (buState && (!oldBuState)) {  // Blue switch press transition?
-    isRunReady = !isRunReady;
+    isRunning = !isRunning;
   }
   oldBuState = buState;
 }
