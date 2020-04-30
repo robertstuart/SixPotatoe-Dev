@@ -88,7 +88,7 @@ void balance() {
   targetWKphRight = targetWKph - balanceSteerAdjustment;
   targetWKphLeft = targetWKph + balanceSteerAdjustment;
 
-if (isRunning) addLog(imu.vertAccel, imu.accelZ, wKph, imu.maPitch);
+//if (isRunning) addLog(imu.vertAccel, imu.accelZ, wKph, imu.maPitch);
 //Serial.println(wKph);
 //if (abs(wKph) > 3.0) Serial.print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
 } // end balance() 
@@ -176,7 +176,7 @@ void postLog() {
   const int MOD = 1;  // 1 = every loop, 2 = every other loop, mod3 = every 3rd loop, etc.
   logLoop++;
   if ((logLoop % MOD) == 0) { 
-//    if (isRouteInProgress) 
-//      addLog(imu.gHeading, (float) currentLoc.x, (float) currentLoc.y, wKph);
+    if (isRunning) 
+      addLog(imu.maPitch, imu.accelZ, imu.accelY, wKph);
   }
 }

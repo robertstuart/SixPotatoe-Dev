@@ -62,17 +62,17 @@ void IMU::imuInit(TwoWire &wirePort, uint8_t ad0_val) {
 //  myDLPcfg.g = gyr_d51bw2_n73bw3;    // BW = 52, see ICM_20948_ENUMERATIONS.h 
 //  myDLPcfg.g = gyr_d23bw9_n35bw9;    // BW = 23, see ICM_20948_ENUMERATIONS.h 
   icm20948.setDLPFcfg( (ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr), myDLPcfg );
-  checkError("setDLPFcfg");
+  checkError((const char*)"setDLPFcfg");
   icm20948.enableDLPF( ICM_20948_Internal_Acc, true );
   checkError("Accelerometer: enableDLPF");
   icm20948.enableDLPF( ICM_20948_Internal_Gyr, true );
   checkError("Gyro: enableDLPF");
 
-  char* stat = (isError) ? "failed" : "complete";
+  const char* stat = (isError) ? "failed" : "complete";
   Serial.printf("\nICM-20948 configuration %s!", stat);
 }
 
-void IMU::checkError(char* s) {
+void IMU::checkError(const char* s) {
   if( icm20948.status != ICM_20948_Stat_Ok) {
     isError = true;
     Serial.printf("%s() returned: %s\n", icm20948.statusString());
@@ -228,6 +228,7 @@ boolean IMU::isNewImuData() {
 
     vertAccel = (cos(maPitch * DEG_TO_RAD) * accelZ) + (sin(maPitch * DEG_TO_RAD) * accelY);
     horAccel = (sin(maPitch * DEG_TO_RAD) * accelZ) + (cos(maPitch * DEG_TO_RAD) * accelY);
+    horAccelFps += horAccel * 0.213; // K3
 
 //    Serial.printf("%7.2f %7.2f %7.2f %7.2f %7.2f %7.2f\n", maPitch, maRoll, maYaw, gaPitch, gaRoll, gHeading);
     return true;

@@ -18,7 +18,7 @@ private:
   void setSampleRate(float smplFreq);
   void checkDrift(float gyroPitchDelta, float gyroRollDelta, float gyroYawDelta);
   void setDrift(float pitchAve, float rollAve, float yawAve);
-  void checkError(char* s);
+  void checkError(const char* s);
   
   bool isError = false;
   const static int DRIFT_SIZE = 100;  // 1/2 second of data
@@ -53,6 +53,7 @@ public:
 
   float vertAccel = 0.0;
   float horAccel = 0.0;
+  float horAccelFps = 0.0;
 
 };
 
