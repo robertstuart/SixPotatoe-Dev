@@ -22,8 +22,10 @@ void motorInit() {
   analogWrite(PWM_RIGHT_PIN, 0);
   analogWrite(PWM_LEFT_PIN, 0);
 
-  attachInterrupt(digitalPinToInterrupt(ENC_A_RIGHT_PIN), encoderIsrRight, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENC_A_LEFT_PIN), encoderIsrLeft, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_A_RIGHT_PIN), encoderIsrRightA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_B_RIGHT_PIN), encoderIsrRightB, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_A_LEFT_PIN), encoderIsrLeftA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_B_LEFT_PIN), encoderIsrLeftB, CHANGE);
 }
 
 
@@ -31,29 +33,41 @@ void motorInit() {
 /******************************************************************************
  * encoderIsr???()
  *****************************************************************************/
-void encoderIsrRight() {
-  static boolean encAStat;
-  static boolean encBStat;
-  long tickPeriodRight;
-
+void encoderIsrRightA() { encoderIsrRight(true); }
+void encoderIsrRightB() { encoderIsrRight(false); }
+void encoderIsrRight(bool isA) {
+  static bool oldA = true;
+  static bool oldB = true;
+  static bool oldIsFwd = true;
   boolean encA = (digitalReadFast(ENC_A_RIGHT_PIN) == HIGH) ? true : false;
-  if (encA == encAStat) return;  // Ignore bogus interrupts
-  encAStat = encA;
+  boolean encB = (digitalReadFast(ENC_B_RIGHT_PIN) == HIGH) ? true : false;
+  bool isChangeDir = false;
+  bool isFwd = true;
+
+  if ((isA && (encA == oldA)) || (!isA && (encB == oldB))) {
+    interruptErrorsRight++; // Bogus unterrupt!
+    return;
+  }
+  oldA = encA;
+  oldB = encB;
   unsigned long lastTickTime = tickTimeRight;
   tickTimeRight = micros();
-  boolean encB = (digitalReadFast(ENC_B_RIGHT_PIN) == HIGH) ? true : false;
-  if (encB == encBStat) return;  // Ignore reversal of direction
-  encBStat = encB;
-
-  // Set the speed & tickPosition
-  if (encA != encB) {
-    tickPeriodRight = (long) tickTimeRight - (long) lastTickTime;
-    tickPositionRight++;
+  
+  // Get direction.
+  if (isA && (encA == encB)) isFwd = false;
+  else if (!isA && (encA != encB)) isFwd = false;
+  else isFwd = true;
+  if (oldIsFwd != isFwd) isChangeDir = true;
+  oldIsFwd = isFwd;
+  
+  tickPositionRight = (isFwd) ? (tickPositionRight + 1) : (tickPositionRight - 1);
+  if (isChangeDir) {
+    changeDirRight++;
+    return; // Don't time reversals
   }
-  else {
-    tickPeriodRight = (long) lastTickTime - (long) tickTimeRight;
-    tickPositionRight--;
-  }
+  int tickPeriodRight = (int) (tickTimeRight - lastTickTime);
+  if (!isFwd) tickPeriodRight = - tickPeriodRight;
+//addLog((float) isFwd, (float) tickPeriodRight, 0.0, 0.0);  
   tickSumRight += tickPeriodRight;
   tickCountRight++;
 } // encoderIsrRight()
@@ -62,29 +76,40 @@ void encoderIsrRight() {
 /**************************************************************************.
    encoderIsrLeft()
  **************************************************************************/
-void encoderIsrLeft() {
-  static boolean encAStat;
-  static boolean encBStat;
-  long tickPeriodLeft;
-
+void encoderIsrLeftA() { encoderIsrLeft(true); }
+void encoderIsrLeftB() { encoderIsrLeft(false); }
+void encoderIsrLeft(bool isA) {
+  static bool oldA = true;
+  static bool oldB = true;
+  static bool oldIsFwd = true;
   boolean encA = (digitalReadFast(ENC_A_LEFT_PIN) == HIGH) ? true : false;
-  if (encA == encAStat) return;  // Ignore bogus interrupts
-  encAStat = encA;
+  boolean encB = (digitalReadFast(ENC_B_LEFT_PIN) == HIGH) ? true : false;
+  bool isChangeDir = false;
+  bool isFwd = true;
+
+  if ((isA && (encA == oldA)) || (!isA && (encB == oldB))) {
+    interruptErrorsLeft++; // Bogus unterrupt!
+    return;
+  }
+  oldA = encA;
+  oldB = encB;
   unsigned long lastTickTime = tickTimeLeft;
   tickTimeLeft = micros();
-  boolean encB = (digitalReadFast(ENC_B_LEFT_PIN) == HIGH) ? true : false;
-  if (encB == encBStat) return;  // Ignore reversal of direction.
-  encBStat = encB;
-
-  // Set the speed & tickPosition
-  if (encA != encB) {
-    tickPeriodLeft = (long) lastTickTime - (long) tickTimeLeft;
-    tickPositionLeft--;
+  
+  // Get direction.
+  if (isA && (encA == encB)) isFwd = true;
+  else if (!isA && (encA != encB)) isFwd = true;
+  else isFwd = false;
+  if (oldIsFwd != isFwd) isChangeDir = true;
+  oldIsFwd = isFwd;
+  
+  tickPositionLeft = (isFwd) ? (tickPositionLeft + 1) : (tickPositionLeft - 1);
+  if (isChangeDir) {
+    changeDirLeft++;
+    return; // Don't time reversals
   }
-  else {
-    tickPeriodLeft = (long)tickTimeLeft - (long) lastTickTime;
-    tickPositionLeft++;
-  }
+  int tickPeriodLeft = (int) (tickTimeLeft - lastTickTime);
+  if (!isFwd) tickPeriodLeft = - tickPeriodLeft;
   tickSumLeft += tickPeriodLeft;
   tickCountLeft++;
 } // end encoderIsrLeft();

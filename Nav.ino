@@ -311,7 +311,7 @@ boolean doBowl() {
   // Get bowl completed which is 0.0 at beginning 1.0 at end;
   bowlCompleted = currentDistance / stepDistance;
   bowlCompleted = constrain(bowlCompleted, 0.0, 1.0);
-//addLog(imu.accelZ, wKph, currentDistance, imu.maPitch);
+addLog(imu.accelZ, wKph, currentDistance, imu.maPitch);
   return false;
 }
 
@@ -332,7 +332,7 @@ bool doAir() {
   } else {
     targetWKphRight = targetWKphLeft = -(bowlWKph + 3.5);
   }
-//addLog(imu.accelZ, wKph, airTime, imu.maPitch);
+addLog(imu.accelZ, wKph, airTime, imu.maPitch);
   return (airTime > 700) ? true : false;
 }
 

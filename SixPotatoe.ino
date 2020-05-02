@@ -10,12 +10,13 @@ const bool IS_TEST1 = false;  // Set to be true for the 1st system test.
 const bool IS_TEST2 = false;  // Set to be true for the 2nd system test.
 const bool IS_TEST3 = false;  // Set to be true for the 3nd system test.
 const bool IS_TEST4 = false;  // Set to be true for the 4th system test.
+const bool IS_TEST5 = false;  // Set to be true for the 4th system test.
 
 // wheel and motor constants
 //const float GYRO_WEIGHT = 0.997;
 const float WHEEL_DIA_MM = 120.6;
-//const float TICKS_PER_ROTATION = 329.5;  // 612 RPM motor
-const float TICKS_PER_ROTATION = 460.8;  // 437 RPM motor
+//const float TICKS_PER_ROTATION = 659.0;  // 612 RPM motor
+const float TICKS_PER_ROTATION = 921.6;  // 437 RPM motor
 const float TICKS_PER_METER = (1000.0 / (M_PI * WHEEL_DIA_MM)) * TICKS_PER_ROTATION;
 const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
 //const float KPH_TO_PW = 8.1;  // 612 RPM motor
@@ -91,12 +92,16 @@ String logHeader = "No Header";
 // Motor varialbles
 volatile long tickPositionRight = 0;
 volatile long tickPositionLeft = 0;
-volatile long tickTimeRight = 0;
-volatile long tickTimeLeft = 0;
-volatile long tickSumRight = 0;
-volatile long tickSumLeft = 0;
-volatile long tickCountRight = 0;
-volatile long tickCountLeft = 0;
+volatile unsigned long tickTimeRight = 0;
+volatile unsigned long tickTimeLeft = 0;
+volatile int tickSumRight = 0;
+volatile int tickSumLeft = 0;
+volatile int tickCountRight = 0;
+volatile int tickCountLeft = 0;
+volatile int interruptErrorsRight = 0;
+volatile int interruptErrorsLeft = 0;
+volatile int changeDirRight = 0;
+volatile int changeDirLeft = 0;
 float wKphRight = 0.0;
 float wKphLeft = 0.0;
 float wKph = 0.0;
@@ -231,6 +236,7 @@ void loop() {
   else if (IS_TEST2)  systemTest2();
   else if (IS_TEST3)  systemTest3();
   else if (IS_TEST4)  systemTest4();
+  else if (IS_TEST5)  systemTest5();
   else run();
 }
 
@@ -249,7 +255,7 @@ void systemTest1() {
             "Pitch:%6.2f   Roll:%6.2f   Yaw:%6.2f   Period:%2d ms\n", 
             imu.maPitch, imu.maRoll, imu.maYaw, ((int) (newT - lastT)));
     lastT = newT;
-    blink13();
+    blinkTeensy();
   }
 }
 // Check the RC controller and battery power
@@ -262,7 +268,7 @@ void systemTest2() {
       Serial.printf("ch1:%5.2f     ch2:%5.2f     ch3:%1d     ch4:%1d     ch5:%5.2f   ch5St5ate:%1d    ch6:%5.2f\n", 
                     controllerX, controllerY, ch3State, ch4State, ch5Val, ch5State, ch6Val);
     }
-    blink13();
+    blinkTeensy();
   }
 }
 // Check motor controlers and encoders
@@ -280,7 +286,7 @@ void systemTest3() {
       readSpeedRight();
       readSpeedLeft();
       Serial.printf("%7.2f %7.2f %5d %5d %5d\n", wKphRight, wKphLeft, r, l, isRunning);
-      blink13();
+      blinkTeensy();
     }
   }
 }
@@ -295,7 +301,19 @@ void systemTest4() {
       targetWKphLeft = y - x;
       runMotors();
       Serial.printf("%7.2f %7.2f %7.2f %7.2f %5d\n", wKphRight, wKphLeft, x, y, isRunning);
-      blink13();
+      blinkTeensy();
+    }
+  }
+}
+// 
+void systemTest5() {
+  while (true) {
+    commonTasks();
+    if (imu.isNewImuData()) {
+      readSpeedRight();
+      readSpeedLeft();
+      Serial.printf("%7.2f %7.2f %3d %3d\n", wKphRight, wKphLeft, tickPositionRight, tickPositionLeft);
+      blinkTeensy();
     }
   }
 }

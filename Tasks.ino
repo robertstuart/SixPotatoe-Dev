@@ -93,7 +93,7 @@ void blinkLed() {
     analogWrite(LED_BU_PIN, buState ? K20 : 0);
   }
 }
-void blink13() {  // Just blink the Teensy
+void blinkTeensy() {  // Just blink the Teensy. Normally IMU heartbeat.
   static unsigned int blinkCount;
   digitalWrite(LED_PIN, ((blinkCount++ / 50) % 2) ? HIGH : LOW);
 }

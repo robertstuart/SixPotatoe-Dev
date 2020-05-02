@@ -69,7 +69,7 @@ void IMU::imuInit(TwoWire &wirePort, uint8_t ad0_val) {
   checkError("Gyro: enableDLPF");
 
   const char* stat = (isError) ? "failed" : "complete";
-  Serial.printf("\nICM-20948 configuration %s!", stat);
+  Serial.printf("\nICM-20948 configuration %s!\n", stat);
 }
 
 void IMU::checkError(const char* s) {
