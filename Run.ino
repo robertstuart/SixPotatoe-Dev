@@ -44,18 +44,19 @@ void rcControl() {
   float part = 0.0;
   // Set values for balancing
   balanceTargetKph = controllerY * K30;
-  float yfac = (((1.0 - abs(controllerY)) * 01.5) + 0.5) * 2.0; 
-  balanceSteerAdjustment = -yfac * controllerX; 
+//  float yfac = (((1.0 - abs(controllerY)) * 01.5) + 0.5) * 2.0; 
+//  balanceSteerAdjustment = -yfac * controllerX; 
 
   // LP filter the wheel kph
   lpWKph = (wKph * KPH_TC) + (lpWKph * (1.0 - KPH_TC));
   
   float x = constrain(controllerX, -.9999, 0.9999);
   float diff = pow(abs(x), 3.0);
-  float radius = 0.14 / diff;
-  float maxDiff = 2.0 / abs(lpWKph);
+//  float radius = 0.14 / diff;
+  float maxDiff = 2.0 / abs(lpWKph); // Limit radius at higher speeds.
   if (diff > maxDiff) diff = maxDiff;
   if (x > 0.0) diff = -diff;
+  if (lpWKph < 0.0) diff = -diff;
   float absKph = abs(lpWKph);
   if (absKph < Z_TURN) {
     part = (Z_TURN - absKph) / Z_TURN;

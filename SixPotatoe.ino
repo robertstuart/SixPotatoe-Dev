@@ -4,23 +4,68 @@
 #include <Wire.h>
 #include "IMU.h"
 #include "Routes.h"
+#include "Defs.h"
 
-// Test defines
-const bool IS_TEST1 = false;  // Set to be true for the 1st system test.
-const bool IS_TEST2 = false;  // Set to be true for the 2nd system test.
-const bool IS_TEST3 = false;  // Set to be true for the 3nd system test.
-const bool IS_TEST4 = false;  // Set to be true for the 4th system test.
-const bool IS_TEST5 = false;  // Set to be true for the 4th system test.
+#ifdef YELLOW_435
+const float MOTOR_RPM = 435.0;        // RPM at 12V
+const float MOTOR_GEAR_RATIO = 13.7;
+const float MOTOR_STALL_TORQUE = 18.7;
+const float MOTOR_EVENTS = 28.0;       // Encoder ticks per motor revolution
+const bool ENCODER_PHASE = true;
+#endif // YELLOW_435
 
+#ifdef YELLOW_1150
+const float MOTOR_RPM = 1150.0;         // RPM at 12V
+const float MOTOR_GEAR_RATIO = 5.2;
+const float MOTOR_STALL_TORQUE = 7.9;   // kgf-cm
+const float MOTOR_EVENTS = 28.0;        // Encoder ticks per motor revolution
+const bool ENCODER_PHASE = true
+;
+#endif // YELLOW_1150
+
+#ifdef HD_437
+const float MOTOR_RPM = 437.0;          // RPM at 12V
+const float MOTOR_GEAR_RATIO = 19.2;
+const float MOTOR_STALL_TORQUE = 22.0;  // kgf-cm
+const float MOTOR_EVENTS = 48.0;        // Encoder ticks per motor revolution
+const bool ENCODER_PHASE = false;
+#endif // HD_437
+
+#ifdef HD_612
+const float MOTOR_RPM = 612.0;          // RPM at 12V
+const float MOTOR_GEAR_RATIO = 16.0;
+const float MOTOR_STALL_TORQUE = 16.0;  // kgf-cm
+const float MOTOR_EVENTS = 48.0;        // Encoder ticks per motor revolution
+const bool ENCODER_PHASE = false;
+#endif // HD_612
+
+#ifdef HD_1621
+const float MOTOR_RPM = 1621.0;         // RPM at 12V
+const float MOTOR_GEAR_RATIO = 5.18;
+const float MOTOR_STALL_TORQUE = 7.0;   // kgf-cm
+const float MOTOR_EVENTS = 48.0;        // Encoder ticks per motor revolution
+const bool ENCODER_PHASE = true;
+#endif // HD_1621
+
+
+const float MAX_MOTOR_RPM = (BATTERY_VOLTS / NOMINAL_VOLTS) * MOTOR_RPM;
+const float TICKS_PER_ROTATION = MOTOR_EVENTS * MOTOR_GEAR_RATIO;
+const float MAX_MOTOR_KPH =  (WHEEL_DIA_MM * M_PI * MAX_MOTOR_RPM * 60.0) / 1000000.0;
+const float USEC_TO_KPH = (3600.0 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
+const float KPH_TO_PW = 255.5 / MAX_MOTOR_KPH;
+const float TICKS_PER_METER = (1000.0 / (M_PI * WHEEL_DIA_MM)) * TICKS_PER_ROTATION;
+
+
+// Wheel constants
 // wheel and motor constants
 //const float GYRO_WEIGHT = 0.997;
-const float WHEEL_DIA_MM = 120.6;
+
+//const float TICKS_PER_ROTATION = 921.6;  // 437 RPM motor
 //const float TICKS_PER_ROTATION = 659.0;  // 612 RPM motor
-const float TICKS_PER_ROTATION = 921.6;  // 437 RPM motor
-const float TICKS_PER_METER = (1000.0 / (M_PI * WHEEL_DIA_MM)) * TICKS_PER_ROTATION;
-const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
+//const float TICKS_PER_ROTATION = 145.0;    // 1150 RPM Yellow Jacket motor
+//const float USEC_TO_KPH = (3600 * WHEEL_DIA_MM * M_PI) / TICKS_PER_ROTATION;
 //const float KPH_TO_PW = 8.1;  // 612 RPM motor
-const float KPH_TO_PW = 12.4;  // 437 RPM motor
+//const float KPH_TO_PW = 12.4;  // 437 RPM motor
 
 /*****************************************************************************-
  *  Pin definitions
@@ -46,28 +91,6 @@ const int LED_PIN         = 13;
 const int LED_BU_PIN      = 12;
 const int SW_BU_PIN       = 11;
 const int WATCHDOG_PIN    =  8;
-
-// Tunable variables
-const float K0  = 4.0;      // Motor gain
-const float K1  = 1.6;
-const float K2  = 0.05;     // 1.0 passes all hf, near zero passes only low freq.
-const float K3 = 0.213;     // Accelerometer to Kph
-const float K5  = 2.0;      // Speed error to angle
-const float K8  = 0.2;      // bowl roll compensation at top.
-const float K10 = 1.4;      // accelerometer pitch offset
-const float K12 = 50.0;     // +- constraint on target pitch
-//float K13 = 30.0;           // +- constraint on pitch error to prevent too rapid righting
-const float K13 = 20.0;     // +- constraint on pitch error to prevent too rapid righting
-const float K14 = 0.15;     // Angle error to Kph
-const float K15 = 70;       // pitch beyond which is considered to not be upright
-const int   K16 = 50;       // ms time for pitch < K16 to be not upright
-const float K17 = 0.1;      // "D"
-const int   K20 = 80;       // LED brightness, 0-255;
-const float K21 = 0.95;     // TC for accelCoKph
-//const float K30 = 22.0;     // Maximum Kph target for controller, 612 RPM
-const float K30 = 16.0;     // Maximum Kph target for controller, 437 RPM
-const float K31 = 5.0;      // Maximum speed for Kph on ground.
-const float K32 = 2.0;      // Maximum sterring on ground.
 
 enum BlinkState {
   BLINK_OFF,        //  motors off, no route
@@ -258,7 +281,7 @@ void systemTest1() {
     blinkTeensy();
   }
 }
-// Check the RC controller and battery power
+// Check the RC controller
 void systemTest2() {
   static boolean toggle = false;
   static int m = 0;

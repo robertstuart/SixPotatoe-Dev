@@ -33,8 +33,8 @@ void motorInit() {
 /******************************************************************************
  * encoderIsr???()
  *****************************************************************************/
-void encoderIsrRightA() { encoderIsrRight(true); }
-void encoderIsrRightB() { encoderIsrRight(false); }
+void encoderIsrRightA() { encoderIsrRight(true ^ ENCODER_PHASE); }
+void encoderIsrRightB() { encoderIsrRight(false ^ ENCODER_PHASE); }
 void encoderIsrRight(bool isA) {
   static bool oldA = true;
   static bool oldB = true;
@@ -76,8 +76,8 @@ void encoderIsrRight(bool isA) {
 /**************************************************************************.
    encoderIsrLeft()
  **************************************************************************/
-void encoderIsrLeftA() { encoderIsrLeft(true); }
-void encoderIsrLeftB() { encoderIsrLeft(false); }
+void encoderIsrLeftA() { encoderIsrLeft(true ^ ENCODER_PHASE); }
+void encoderIsrLeftB() { encoderIsrLeft(false ^ ENCODER_PHASE); }
 void encoderIsrLeft(bool isA) {
   static bool oldA = true;
   static bool oldB = true;
